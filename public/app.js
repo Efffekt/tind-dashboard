@@ -1,25 +1,34 @@
-// ─── Tind Order Dashboard TV ───
+// ─── Tind Order Dashboard ───
 
-function statusPill(status) {
+function pill(status) {
   const n = (status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
   const labels = {
     pending: 'Ventende', shipped: 'Sendt', fulfilled: 'Fullfort',
     delivered: 'Levert', cancelled: 'Kansellert', processing: 'Behandles',
     open: 'Apen', in_transit: 'Under transport', intransit: 'Under transport',
   };
-  return `<span class="status-pill ${n}">${labels[n] || status || 'Ukjent'}</span>`;
+  return `<span class="pill pill-${n}">${labels[n] || status || 'Ukjent'}</span>`;
 }
 
-function sourceTag(source) {
-  return `<span class="source-tag ${source}">${source === 'shiphero' ? 'SH' : 'PK'}</span>`;
+function stag(source) {
+  const cls = source === 'shiphero' ? 'stag-sh' : 'stag-pk';
+  const label = source === 'shiphero' ? 'SH' : 'PK';
+  return `<span class="stag ${cls}">${label}</span>`;
 }
 
-function formatTime(dateStr) {
-  if (!dateStr) return '–';
-  return new Intl.DateTimeFormat('nb-NO', {
-    day: 'numeric', month: 'short',
-    hour: '2-digit', minute: '2-digit',
-  }).format(new Date(dateStr));
+function fmtTime(d) {
+  if (!d) return '–';
+  const date = new Date(d);
+  const now = new Date();
+  const diffH = Math.floor((now.getTime() - date.getTime()) / 3600000);
+
+  if (diffH < 1) {
+    const mins = Math.floor((now.getTime() - date.getTime()) / 60000);
+    return mins < 1 ? 'Akkurat na' : `${mins} min siden`;
+  }
+  if (diffH < 24) return `${diffH}t siden`;
+
+  return new Intl.DateTimeFormat('nb-NO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
 function setStatus(state, text) {
@@ -31,8 +40,8 @@ function renderStats(stats) {
   document.getElementById('stat-total').textContent = stats.totalOrders;
   document.getElementById('stat-pending').textContent = stats.pendingOrders;
   document.getElementById('stat-shipped').textContent = stats.shippedToday;
-  document.getElementById('source-sh-count').textContent = stats.ordersBySource.shiphero;
-  document.getElementById('source-pk-count').textContent = stats.ordersBySource.packiyo;
+  document.getElementById('source-sh').textContent = stats.ordersBySource.shiphero;
+  document.getElementById('source-pk').textContent = stats.ordersBySource.packiyo;
 }
 
 function renderOrders(orders) {
@@ -42,32 +51,21 @@ function renderOrders(orders) {
     return;
   }
 
-  const header = `
-    <div class="order-header">
-      <span>Ordre</span>
-      <span>Kunde</span>
-      <span>Antall</span>
-      <span>Status</span>
-      <span>Sporing</span>
-      <span>Tidspunkt</span>
-    </div>
-  `;
-
-  const rows = orders.map(o => `
+  feed.innerHTML = orders.map(o => `
     <div class="order-row">
-      <span class="order-number">${sourceTag(o.source)}${o.orderNumber}</span>
+      <div class="order-id">
+        ${stag(o.source)}
+        <span class="order-number">${o.orderNumber}</span>
+      </div>
       <span class="order-customer">${o.customerName}</span>
-      <span class="order-items font-number">${o.totalItems}</span>
-      ${statusPill(o.status)}
-      <span class="order-tracking">${o.trackingNumbers.length ? o.trackingNumbers[0] : '–'}</span>
-      <span class="order-time">${formatTime(o.createdAt)}</span>
+      <span class="order-qty font-number">${o.totalItems}</span>
+      ${pill(o.status)}
+      <span class="order-time">${fmtTime(o.createdAt)}</span>
     </div>
   `).join('');
-
-  feed.innerHTML = header + rows;
 }
 
-async function loadDashboard() {
+async function load() {
   try {
     const res = await fetch('/api/data');
     if (!res.ok) throw new Error(`${res.status}`);
@@ -78,18 +76,20 @@ async function loadDashboard() {
 
     setStatus('online', data.mock ? 'Testdata' : 'Live');
 
-    const banner = document.getElementById('mock-banner');
-    if (banner) banner.style.display = data.mock ? 'block' : 'none';
+    document.getElementById('mock-banner').style.display = data.mock ? 'block' : 'none';
 
-    const syncEl = document.getElementById('last-sync');
-    if (syncEl) {
-      const time = new Intl.DateTimeFormat('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(data.fetchedAt));
-      syncEl.textContent = `Sist oppdatert: ${time}`;
-    }
+    const time = new Intl.DateTimeFormat('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(data.fetchedAt));
+    document.getElementById('last-sync').textContent = `Sist oppdatert: ${time}`;
   } catch {
     setStatus('error', 'Frakoblet');
   }
 }
 
-loadDashboard();
-setInterval(loadDashboard, 30_000);
+// Header scroll effect — matches tind-web
+const header = document.getElementById('site-header');
+window.addEventListener('scroll', () => {
+  if (header) header.classList.toggle('scrolled', window.scrollY > 10);
+}, { passive: true });
+
+load();
+setInterval(load, 30_000);

@@ -13,23 +13,25 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <!-- Page frame -->
   <div class="page-frame" aria-hidden="true"><div></div></div>
 
-  <header class="header">
+  <!-- Header — matches tind-web exactly -->
+  <header class="header" id="site-header">
     <div class="container header-inner">
       <a href="/" class="logo">
         <img src="/logos/tind-mark.svg" alt="" width="24" height="31" class="logo-mark" />
         <span class="logo-text">Tind Logistics</span>
       </a>
       <div class="header-center">
-        <span class="header-label">Ordredashboard</span>
-        <span class="header-separator">·</span>
-        <span class="header-status">
-          <span class="status-dot" id="status-dot"></span>
-          <span class="status-text" id="status-text">Kobler til...</span>
-        </span>
+        <span class="header-badge">Ordredashboard</span>
       </div>
       <div class="header-right">
+        <span class="header-status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text" class="status-label">Kobler til...</span>
+        </span>
+        <span class="header-sep">·</span>
         <span class="header-clock font-number" id="live-clock">--:--:--</span>
       </div>
     </div>
@@ -40,41 +42,58 @@
   </div>
 
   <main class="main">
-    <div class="container">
+    <div class="container main-grid">
 
-      <!-- Stat strip -->
-      <div class="grid-bordered grid-stats">
-        <div class="grid-cell grid-cell-stat">
-          <div class="stat-big font-number" id="stat-total">--</div>
-          <div class="stat-big-label">Totale ordrer</div>
+      <!-- Top: Editorial heading — exact tind-web pattern -->
+      <div class="bordered-grid heading-grid">
+        <div class="cell cell-bg heading-left">
+          <p class="label">Sanntid</p>
+          <h1 class="title">Ordrestatus</h1>
         </div>
-        <div class="grid-cell grid-cell-stat">
-          <div class="stat-big stat-warning font-number" id="stat-pending">--</div>
-          <div class="stat-big-label">Ventende</div>
-        </div>
-        <div class="grid-cell grid-cell-stat">
-          <div class="stat-big stat-success font-number" id="stat-shipped">--</div>
-          <div class="stat-big-label">Sendt i dag</div>
-        </div>
-        <div class="grid-cell grid-cell-source">
-          <span class="source-badge badge-shiphero">ShipHero</span>
-          <span class="source-count font-number" id="source-sh-count">--</span>
-        </div>
-        <div class="grid-cell grid-cell-source">
-          <span class="source-badge badge-packiyo">Packiyo</span>
-          <span class="source-count font-number" id="source-pk-count">--</span>
+        <div class="cell cell-bg heading-right">
+          <p class="body-lg">Kombinert ordreflyt fra Packiyo og ShipHero — oppdateres hvert 3. minutt.</p>
         </div>
       </div>
 
-      <!-- Orders table -->
-      <div class="grid-bordered grid-orders">
-        <div class="grid-cell grid-cell-full">
-          <div class="cell-heading">
-            <div class="cell-heading-left">
-              <p class="cell-label">Sanntid</p>
-              <h2 class="cell-title">Ordrer</h2>
+      <!-- Hero stats — matches tind-web hero stat strip exactly -->
+      <div class="bordered-grid stats-grid no-top-border">
+        <div class="cell cell-white stat-cell">
+          <p class="stat-number font-number" id="stat-total">--</p>
+          <p class="stat-caption">Totale ordrer</p>
+        </div>
+        <div class="cell cell-white stat-cell">
+          <p class="stat-number stat-warning font-number" id="stat-pending">--</p>
+          <p class="stat-caption">Ventende</p>
+        </div>
+        <div class="cell cell-white stat-cell">
+          <p class="stat-number stat-success font-number" id="stat-shipped">--</p>
+          <p class="stat-caption">Sendt i dag</p>
+        </div>
+        <div class="cell cell-white stat-cell">
+          <div class="source-split">
+            <div class="source-item">
+              <span class="source-badge badge-sh">ShipHero</span>
+              <span class="source-num font-number" id="source-sh">--</span>
             </div>
-            <p class="cell-subtitle">Kombinert fra Packiyo og ShipHero</p>
+            <div class="source-divider"></div>
+            <div class="source-item">
+              <span class="source-badge badge-pk">Packiyo</span>
+              <span class="source-num font-number" id="source-pk">--</span>
+            </div>
+          </div>
+          <p class="stat-caption">Per kilde</p>
+        </div>
+      </div>
+
+      <!-- Orders feed — tind-web bordered grid pattern -->
+      <div class="bordered-grid orders-section no-top-border">
+        <div class="cell cell-bg orders-cell">
+          <div class="orders-header">
+            <div class="oh-col">Ordre</div>
+            <div class="oh-col">Kunde</div>
+            <div class="oh-col oh-right">Antall</div>
+            <div class="oh-col">Status</div>
+            <div class="oh-col oh-right">Tidspunkt</div>
           </div>
           <div class="orders-feed" id="orders-feed">
             <div class="feed-empty">Laster ordrer...</div>
@@ -85,30 +104,31 @@
     </div>
   </main>
 
+  <!-- Footer — matches tind-web dark footer -->
   <footer class="footer">
     <div class="container footer-inner">
       <div class="footer-left">
         <img src="/logos/tind-mark-white.svg" alt="" width="20" height="26" class="footer-mark" />
-        <span class="footer-name">Tind Logistics AS</span>
+        <span class="footer-brand">Tind Logistics AS</span>
         <span class="footer-sep">·</span>
-        <span class="footer-detail">+47 412 74 141</span>
+        <span class="footer-meta">+47 412 74 141</span>
         <span class="footer-sep">·</span>
-        <span class="footer-detail">post@tindlogistics.no</span>
+        <span class="footer-meta">post@tindlogistics.no</span>
       </div>
       <div class="footer-right">
-        <span class="footer-detail" id="last-sync">Sist oppdatert: --</span>
+        <span class="footer-meta" id="last-sync">Sist oppdatert: --</span>
       </div>
     </div>
   </footer>
 
   <script src="/app.js"></script>
   <script>
-    function updateClock() {
+    // Clock
+    function tick() {
       const el = document.getElementById('live-clock');
-      if (el) el.textContent = new Intl.DateTimeFormat('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date());
+      if (el) el.textContent = new Intl.DateTimeFormat('nb-NO', { hour:'2-digit', minute:'2-digit', second:'2-digit' }).format(new Date());
     }
-    updateClock();
-    setInterval(updateClock, 1000);
+    tick(); setInterval(tick, 1000);
   </script>
 </body>
 </html>
