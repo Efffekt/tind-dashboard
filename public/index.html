@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard | Tind Logistics</title>
   <meta name="theme-color" content="#F5F5F3" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap" rel="stylesheet" />
@@ -12,22 +13,28 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <!-- Page frame — matches tind-web -->
+  <div class="page-frame" aria-hidden="true"><div></div></div>
+
   <!-- Header -->
-  <header class="header">
+  <header class="header" id="site-header">
     <div class="container header-inner">
-      <div class="logo">
-        <span class="logo-mark">T</span>
-        <span class="logo-text">Tind Dashboard</span>
-      </div>
+      <a href="/" class="logo">
+        <img src="/logos/tind-mark.svg" alt="" width="24" height="31" class="logo-mark" />
+        <span class="logo-text">Tind Logistics</span>
+      </a>
       <nav class="nav">
         <button class="nav-tab active" data-view="overview">Oversikt</button>
         <button class="nav-tab" data-view="orders">Ordrer</button>
         <button class="nav-tab" data-view="inventory">Lagerbeholdning</button>
         <button class="nav-tab" data-view="shipments">Forsendelser</button>
       </nav>
-      <div class="header-status">
-        <span class="status-dot" id="status-dot"></span>
-        <span class="status-text" id="status-text">Kobler til...</span>
+      <div class="header-right">
+        <div class="header-status">
+          <span class="status-dot" id="status-dot"></span>
+          <span class="status-text" id="status-text">Kobler til...</span>
+        </div>
+        <span class="header-badge">Dashboard</span>
       </div>
     </div>
   </header>
@@ -42,24 +49,42 @@
       <!-- Overview -->
       <section id="view-overview" class="view active">
         <div class="section-header">
-          <h1 class="heading-1">Oversikt</h1>
-          <p class="subtitle">Kombinert data fra Packiyo og ShipHero</p>
+          <div>
+            <h1 class="heading-1">Oversikt</h1>
+            <p class="subtitle">Kombinert data fra Packiyo og ShipHero</p>
+          </div>
+          <div class="live-clock">
+            <span class="clock-label">Sanntid</span>
+            <span class="clock-time font-number" id="live-clock">--:--</span>
+          </div>
         </div>
 
         <div class="stats-grid" id="stats-grid">
           <div class="stat-card">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
             <span class="stat-label">Totale ordrer</span>
             <span class="stat-value font-number" id="stat-total">--</span>
           </div>
           <div class="stat-card">
+            <div class="stat-icon stat-icon-warning">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
             <span class="stat-label">Ventende</span>
             <span class="stat-value font-number" id="stat-pending">--</span>
           </div>
           <div class="stat-card">
+            <div class="stat-icon stat-icon-success">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+            </div>
             <span class="stat-label">Sendt i dag</span>
             <span class="stat-value font-number" id="stat-shipped">--</span>
           </div>
           <div class="stat-card">
+            <div class="stat-icon stat-icon-danger">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
             <span class="stat-label">Lavt lager</span>
             <span class="stat-value font-number" id="stat-lowstock">--</span>
           </div>
@@ -69,14 +94,14 @@
           <div class="source-card">
             <div class="source-header">
               <span class="source-badge badge-shiphero">ShipHero</span>
-              <span class="font-number" id="source-sh-count">--</span>
+              <span class="source-count font-number" id="source-sh-count">--</span>
             </div>
             <p class="source-desc">Ordrer fra ShipHero</p>
           </div>
           <div class="source-card">
             <div class="source-header">
               <span class="source-badge badge-packiyo">Packiyo</span>
-              <span class="font-number" id="source-pk-count">--</span>
+              <span class="source-count font-number" id="source-pk-count">--</span>
             </div>
             <p class="source-desc">Ordrer fra Packiyo</p>
           </div>
@@ -211,6 +236,49 @@
     </div>
   </main>
 
+  <!-- Footer — matches tind-web -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <a href="/" class="logo logo-white">
+          <img src="/logos/tind-mark-white.svg" alt="" width="24" height="31" class="logo-mark" />
+          <span class="logo-text">Tind Logistics</span>
+        </a>
+        <p class="footer-tagline">Norges premium 3PL-partner. Dedikert team, forsteklasses handtering og full transparens.</p>
+      </div>
+      <div class="footer-contact">
+        <h3 class="footer-heading">Kontakt</h3>
+        <ul class="footer-list">
+          <li><a href="tel:+4741274141">+47 412 74 141</a></li>
+          <li><a href="mailto:post@tindlogistics.no">post@tindlogistics.no</a></li>
+          <li>Granittveien 6A, 1592 Valer i Ostfold</li>
+        </ul>
+      </div>
+      <div class="footer-bottom">
+        <p class="footer-copy">&copy; <span id="footer-year"></span> Tind Logistics AS. Org.nr: 930 826 278</p>
+      </div>
+    </div>
+  </footer>
+
   <script src="/app.js"></script>
+  <script>
+    document.getElementById('footer-year').textContent = new Date().getFullYear();
+
+    // Live clock
+    function updateClock() {
+      const el = document.getElementById('live-clock');
+      if (el) el.textContent = new Intl.DateTimeFormat('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date());
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Header scroll effect — matches tind-web
+    const header = document.getElementById('site-header');
+    if (header) {
+      window.addEventListener('scroll', () => {
+        header.classList.toggle('scrolled', window.scrollY > 10);
+      }, { passive: true });
+    }
+  </script>
 </body>
 </html>
