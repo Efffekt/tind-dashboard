@@ -16,25 +16,23 @@
   <!-- Page frame — matches tind-web -->
   <div class="page-frame" aria-hidden="true"><div></div></div>
 
-  <!-- Header -->
-  <header class="header" id="site-header">
+  <!-- Header bar -->
+  <header class="header">
     <div class="container header-inner">
       <a href="/" class="logo">
         <img src="/logos/tind-mark.svg" alt="" width="24" height="31" class="logo-mark" />
         <span class="logo-text">Tind Logistics</span>
       </a>
-      <nav class="nav">
-        <button class="nav-tab active" data-view="overview">Oversikt</button>
-        <button class="nav-tab" data-view="orders">Ordrer</button>
-        <button class="nav-tab" data-view="inventory">Lagerbeholdning</button>
-        <button class="nav-tab" data-view="shipments">Forsendelser</button>
-      </nav>
-      <div class="header-right">
-        <div class="header-status">
+      <div class="header-center">
+        <span class="header-label">Warehouse Dashboard</span>
+        <span class="header-separator">·</span>
+        <span class="header-status">
           <span class="status-dot" id="status-dot"></span>
           <span class="status-text" id="status-text">Kobler til...</span>
-        </div>
-        <span class="header-badge">Dashboard</span>
+        </span>
+      </div>
+      <div class="header-right">
+        <span class="header-clock font-number" id="live-clock">--:--:--</span>
       </div>
     </div>
   </header>
@@ -46,224 +44,105 @@
   <main class="main">
     <div class="container">
 
-      <!-- Overview -->
-      <section id="view-overview" class="view active">
-        <div class="section-header">
-          <div>
-            <h1 class="heading-1">Oversikt</h1>
-            <p class="subtitle">Kombinert data fra Packiyo og ShipHero</p>
+      <!-- Hero stats strip — mimics tind-web hero stat row -->
+      <div class="grid-bordered grid-4">
+        <div class="grid-cell grid-cell-stat">
+          <div class="stat-big font-number" id="stat-total">--</div>
+          <div class="stat-big-label">Totale ordrer</div>
+        </div>
+        <div class="grid-cell grid-cell-stat">
+          <div class="stat-big stat-warning font-number" id="stat-pending">--</div>
+          <div class="stat-big-label">Ventende</div>
+        </div>
+        <div class="grid-cell grid-cell-stat">
+          <div class="stat-big stat-success font-number" id="stat-shipped">--</div>
+          <div class="stat-big-label">Sendt i dag</div>
+        </div>
+        <div class="grid-cell grid-cell-stat">
+          <div class="stat-big stat-danger font-number" id="stat-lowstock">--</div>
+          <div class="stat-big-label">Lavt lager</div>
+        </div>
+      </div>
+
+      <!-- Main content: two columns -->
+      <div class="grid-bordered grid-main">
+
+        <!-- Left column: Orders feed -->
+        <div class="grid-cell grid-cell-orders">
+          <!-- Editorial heading — matches tind-web pattern -->
+          <div class="cell-heading">
+            <p class="cell-label">Sanntid</p>
+            <h2 class="cell-title">Siste ordrer</h2>
           </div>
-          <div class="live-clock">
-            <span class="clock-label">Sanntid</span>
-            <span class="clock-time font-number" id="live-clock">--:--</span>
+          <div class="orders-feed" id="orders-feed">
+            <div class="feed-empty">Laster ordrer...</div>
           </div>
         </div>
 
-        <div class="stats-grid" id="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            </div>
-            <span class="stat-label">Totale ordrer</span>
-            <span class="stat-value font-number" id="stat-total">--</span>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon stat-icon-warning">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            </div>
-            <span class="stat-label">Ventende</span>
-            <span class="stat-value font-number" id="stat-pending">--</span>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon stat-icon-success">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
-            </div>
-            <span class="stat-label">Sendt i dag</span>
-            <span class="stat-value font-number" id="stat-shipped">--</span>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon stat-icon-danger">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            </div>
-            <span class="stat-label">Lavt lager</span>
-            <span class="stat-value font-number" id="stat-lowstock">--</span>
-          </div>
-        </div>
+        <!-- Right column: Sources + Inventory + Shipments -->
+        <div class="grid-cell-group">
 
-        <div class="source-cards">
-          <div class="source-card">
-            <div class="source-header">
+          <!-- Source split -->
+          <div class="grid-bordered grid-2">
+            <div class="grid-cell grid-cell-source">
               <span class="source-badge badge-shiphero">ShipHero</span>
               <span class="source-count font-number" id="source-sh-count">--</span>
+              <span class="source-label">ordrer</span>
             </div>
-            <p class="source-desc">Ordrer fra ShipHero</p>
-          </div>
-          <div class="source-card">
-            <div class="source-header">
+            <div class="grid-cell grid-cell-source">
               <span class="source-badge badge-packiyo">Packiyo</span>
               <span class="source-count font-number" id="source-pk-count">--</span>
+              <span class="source-label">ordrer</span>
             </div>
-            <p class="source-desc">Ordrer fra Packiyo</p>
           </div>
-        </div>
 
-        <div class="card">
-          <div class="card-header">
-            <h2 class="heading-3">Siste ordrer</h2>
+          <!-- Inventory alerts -->
+          <div class="grid-cell grid-cell-section">
+            <div class="cell-heading">
+              <p class="cell-label">Lager</p>
+              <h3 class="cell-title-sm">Lagerbeholdning</h3>
+            </div>
+            <div class="inventory-list" id="inventory-list">
+              <div class="feed-empty">Laster lager...</div>
+            </div>
           </div>
-          <div class="table-wrap">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Ordrenr.</th>
-                  <th>Kilde</th>
-                  <th>Kunde</th>
-                  <th>Status</th>
-                  <th>Antall</th>
-                  <th>Dato</th>
-                </tr>
-              </thead>
-              <tbody id="recent-orders">
-                <tr><td colspan="6" class="empty-state">Laster data...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
 
-      <!-- Orders -->
-      <section id="view-orders" class="view">
-        <div class="section-header">
-          <h1 class="heading-1">Ordrer</h1>
-          <div class="filters">
-            <select id="filter-order-source" class="select">
-              <option value="all">Alle kilder</option>
-              <option value="shiphero">ShipHero</option>
-              <option value="packiyo">Packiyo</option>
-            </select>
+          <!-- Active shipments -->
+          <div class="grid-cell grid-cell-section">
+            <div class="cell-heading">
+              <p class="cell-label">Frakt</p>
+              <h3 class="cell-title-sm">Aktive forsendelser</h3>
+            </div>
+            <div class="shipments-list" id="shipments-list">
+              <div class="feed-empty">Laster forsendelser...</div>
+            </div>
           </div>
-        </div>
-        <div class="card">
-          <div class="table-wrap">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Ordrenr.</th>
-                  <th>Kilde</th>
-                  <th>Kunde</th>
-                  <th>Status</th>
-                  <th>Antall</th>
-                  <th>Sporing</th>
-                  <th>Opprettet</th>
-                </tr>
-              </thead>
-              <tbody id="orders-table">
-                <tr><td colspan="7" class="empty-state">Laster data...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
 
-      <!-- Inventory -->
-      <section id="view-inventory" class="view">
-        <div class="section-header">
-          <h1 class="heading-1">Lagerbeholdning</h1>
-          <div class="filters">
-            <select id="filter-inv-source" class="select">
-              <option value="all">Alle kilder</option>
-              <option value="shiphero">ShipHero</option>
-              <option value="packiyo">Packiyo</option>
-            </select>
-          </div>
         </div>
-        <div class="card">
-          <div class="table-wrap">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>SKU</th>
-                  <th>Produkt</th>
-                  <th>Kilde</th>
-                  <th>Lager</th>
-                  <th>Pa hand</th>
-                  <th>Tilgjengelig</th>
-                  <th>Allokert</th>
-                </tr>
-              </thead>
-              <tbody id="inventory-table">
-                <tr><td colspan="7" class="empty-state">Laster data...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- Shipments -->
-      <section id="view-shipments" class="view">
-        <div class="section-header">
-          <h1 class="heading-1">Forsendelser</h1>
-          <div class="filters">
-            <select id="filter-ship-source" class="select">
-              <option value="all">Alle kilder</option>
-              <option value="shiphero">ShipHero</option>
-              <option value="packiyo">Packiyo</option>
-            </select>
-          </div>
-        </div>
-        <div class="card">
-          <div class="table-wrap">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Ordrenr.</th>
-                  <th>Kilde</th>
-                  <th>Transportor</th>
-                  <th>Status</th>
-                  <th>Sporing</th>
-                  <th>Sendt</th>
-                  <th>Levert</th>
-                </tr>
-              </thead>
-              <tbody id="shipments-table">
-                <tr><td colspan="7" class="empty-state">Laster data...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
+      </div>
 
     </div>
   </main>
 
-  <!-- Footer — matches tind-web -->
+  <!-- Footer strip — dark, matches tind-web -->
   <footer class="footer">
     <div class="container footer-inner">
-      <div class="footer-brand">
-        <a href="/" class="logo logo-white">
-          <img src="/logos/tind-mark-white.svg" alt="" width="24" height="31" class="logo-mark" />
-          <span class="logo-text">Tind Logistics</span>
-        </a>
-        <p class="footer-tagline">Norges premium 3PL-partner. Dedikert team, forsteklasses handtering og full transparens.</p>
+      <div class="footer-left">
+        <img src="/logos/tind-mark-white.svg" alt="" width="20" height="26" class="footer-mark" />
+        <span class="footer-name">Tind Logistics AS</span>
+        <span class="footer-sep">·</span>
+        <span class="footer-detail">+47 412 74 141</span>
+        <span class="footer-sep">·</span>
+        <span class="footer-detail">post@tindlogistics.no</span>
       </div>
-      <div class="footer-contact">
-        <h3 class="footer-heading">Kontakt</h3>
-        <ul class="footer-list">
-          <li><a href="tel:+4741274141">+47 412 74 141</a></li>
-          <li><a href="mailto:post@tindlogistics.no">post@tindlogistics.no</a></li>
-          <li>Granittveien 6A, 1592 Valer i Ostfold</li>
-        </ul>
-      </div>
-      <div class="footer-bottom">
-        <p class="footer-copy">&copy; <span id="footer-year"></span> Tind Logistics AS. Org.nr: 930 826 278</p>
+      <div class="footer-right">
+        <span class="footer-detail" id="last-sync">Sist oppdatert: --</span>
       </div>
     </div>
   </footer>
 
   <script src="/app.js"></script>
   <script>
-    document.getElementById('footer-year').textContent = new Date().getFullYear();
-
     // Live clock
     function updateClock() {
       const el = document.getElementById('live-clock');
@@ -271,14 +150,6 @@
     }
     updateClock();
     setInterval(updateClock, 1000);
-
-    // Header scroll effect — matches tind-web
-    const header = document.getElementById('site-header');
-    if (header) {
-      window.addEventListener('scroll', () => {
-        header.classList.toggle('scrolled', window.scrollY > 10);
-      }, { passive: true });
-    }
   </script>
 </body>
 </html>

@@ -1,60 +1,40 @@
-// ─── Tind Dashboard — Client ───
-
-// ─── Navigation ───
-const tabs = document.querySelectorAll('.nav-tab');
-const views = document.querySelectorAll('.view');
-
-tabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    const target = tab.dataset.view;
-    tabs.forEach(t => t.classList.remove('active'));
-    views.forEach(v => v.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(`view-${target}`).classList.add('active');
-  });
-});
-
-// ─── Helpers ───
-function sourceBadge(source) {
-  return `<span class="source-tag ${source}">${source === 'shiphero' ? 'ShipHero' : 'Packiyo'}</span>`;
-}
+// ─── Tind Dashboard TV — Single screen, no interaction ───
 
 function statusPill(status) {
-  const normalized = (status || 'unknown').toLowerCase().replace(/[^a-z]/g, '');
-  return `<span class="status-pill ${normalized}">${status || 'Ukjent'}</span>`;
+  const normalized = (status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
+  const labels = {
+    pending: 'Ventende', shipped: 'Sendt', fulfilled: 'Fullfort',
+    delivered: 'Levert', cancelled: 'Kansellert', processing: 'Behandles',
+    open: 'Apen', intransit: 'Under transport', in_transit: 'Under transport',
+  };
+  return `<span class="status-pill ${normalized}">${labels[normalized] || status || 'Ukjent'}</span>`;
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return '–';
-  try {
-    return new Intl.DateTimeFormat('nb-NO', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    }).format(new Date(dateStr));
-  } catch {
-    return dateStr;
-  }
+function sourceTag(source) {
+  return `<span class="source-tag ${source}">${source === 'shiphero' ? 'SH' : 'PK'}</span>`;
 }
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Akkurat na';
-  if (mins < 60) return `${mins} min siden`;
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (mins < 1) return 'Na';
+  if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}t siden`;
-  return `${Math.floor(hours / 24)}d siden`;
+  if (hours < 24) return `${hours}t`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return '';
+  return new Intl.DateTimeFormat('nb-NO', { hour: '2-digit', minute: '2-digit' }).format(new Date(dateStr));
 }
 
 function setStatus(state, text) {
-  const dot = document.getElementById('status-dot');
-  const label = document.getElementById('status-text');
-  dot.className = `status-dot ${state}`;
-  label.textContent = text;
+  document.getElementById('status-dot').className = `status-dot ${state}`;
+  document.getElementById('status-text').textContent = text;
 }
 
-// ─── Render functions ───
+// ─── Render ───
 function renderStats(stats) {
   document.getElementById('stat-total').textContent = stats.totalOrders;
   document.getElementById('stat-pending').textContent = stats.pendingOrders;
@@ -64,126 +44,99 @@ function renderStats(stats) {
   document.getElementById('source-pk-count').textContent = stats.ordersBySource.packiyo;
 }
 
-function renderOrderRows(orders, tbody, showTracking = false) {
+function renderOrders(orders) {
+  const feed = document.getElementById('orders-feed');
   if (!orders.length) {
-    tbody.innerHTML = `<tr><td colspan="${showTracking ? 7 : 6}" class="empty-state">Ingen ordrer funnet</td></tr>`;
+    feed.innerHTML = '<div class="feed-empty">Ingen ordrer</div>';
     return;
   }
 
-  tbody.innerHTML = orders.map(o => `
-    <tr>
-      <td><strong>${o.orderNumber}</strong></td>
-      <td>${sourceBadge(o.source)}</td>
-      <td>${o.customerName}</td>
-      <td>${statusPill(o.status)}</td>
-      <td class="font-number">${o.totalItems}</td>
-      ${showTracking ? `<td>${o.trackingNumbers.length ? o.trackingNumbers.join(', ') : '–'}</td>` : ''}
-      <td>${formatDate(o.createdAt)}</td>
-    </tr>
+  feed.innerHTML = orders.slice(0, 15).map(o => `
+    <div class="order-row">
+      <div class="order-primary">
+        <span class="order-number">${sourceTag(o.source)} ${o.orderNumber}</span>
+        <span class="order-customer">${o.customerName}</span>
+      </div>
+      <span class="order-items font-number">${o.totalItems} stk</span>
+      ${statusPill(o.status)}
+      <span class="order-time">${formatTime(o.createdAt)}</span>
+    </div>
   `).join('');
 }
 
-function renderInventory(items, tbody) {
+function renderInventory(items) {
+  const list = document.getElementById('inventory-list');
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Ingen lagervarer funnet</td></tr>';
+    list.innerHTML = '<div class="feed-empty">Ingen data</div>';
     return;
   }
 
-  tbody.innerHTML = items.map(i => `
-    <tr>
-      <td><strong>${i.sku}</strong></td>
-      <td>${i.productName}</td>
-      <td>${sourceBadge(i.source)}</td>
-      <td>${i.warehouse}</td>
-      <td class="font-number">${i.quantityOnHand}</td>
-      <td class="font-number ${i.quantityAvailable < 10 ? 'low-stock' : ''}">${i.quantityAvailable}</td>
-      <td class="font-number">${i.quantityAllocated}</td>
-    </tr>
+  // Sort: low stock first
+  const sorted = [...items].sort((a, b) => a.quantityAvailable - b.quantityAvailable);
+
+  list.innerHTML = sorted.slice(0, 8).map(i => `
+    <div class="inv-row">
+      <div>
+        <div class="inv-name">${i.productName}</div>
+        <div class="inv-sku">${i.sku} · ${i.warehouse}</div>
+      </div>
+      <div class="inv-qty ${i.quantityAvailable < 10 ? 'low' : ''} font-number">
+        ${i.quantityAvailable}
+      </div>
+      ${sourceTag(i.source)}
+    </div>
   `).join('');
 }
 
-function renderShipments(shipments, tbody) {
-  if (!shipments.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Ingen forsendelser funnet</td></tr>';
+function renderShipments(shipments) {
+  const list = document.getElementById('shipments-list');
+  // Only show active shipments
+  const active = shipments.filter(s => s.status !== 'delivered');
+
+  if (!active.length) {
+    list.innerHTML = '<div class="feed-empty">Ingen aktive forsendelser</div>';
     return;
   }
 
-  tbody.innerHTML = shipments.map(s => `
-    <tr>
-      <td><strong>${s.orderNumber}</strong></td>
-      <td>${sourceBadge(s.source)}</td>
-      <td>${s.carrier || '–'}</td>
-      <td>${statusPill(s.status)}</td>
-      <td>${s.trackingNumber || '–'}</td>
-      <td>${formatDate(s.shippedAt)}</td>
-      <td>${formatDate(s.deliveredAt)}</td>
-    </tr>
+  list.innerHTML = active.slice(0, 6).map(s => `
+    <div class="ship-row">
+      <div>
+        <div class="ship-order">${sourceTag(s.source)} ${s.orderNumber}</div>
+        <div class="ship-carrier">${s.carrier || ''} · ${s.trackingNumber || ''}</div>
+      </div>
+      ${statusPill(s.status)}
+      <span class="order-time">${timeAgo(s.shippedAt)} siden</span>
+    </div>
   `).join('');
 }
 
-// ─── Source filters ───
-let allOrders = [];
-let allInventory = [];
-let allShipments = [];
-
-document.getElementById('filter-order-source').addEventListener('change', (e) => {
-  const src = e.target.value;
-  const filtered = src === 'all' ? allOrders : allOrders.filter(o => o.source === src);
-  renderOrderRows(filtered, document.getElementById('orders-table'), true);
-});
-
-document.getElementById('filter-inv-source').addEventListener('change', (e) => {
-  const src = e.target.value;
-  const filtered = src === 'all' ? allInventory : allInventory.filter(i => i.source === src);
-  renderInventory(filtered, document.getElementById('inventory-table'));
-});
-
-document.getElementById('filter-ship-source').addEventListener('change', (e) => {
-  const src = e.target.value;
-  const filtered = src === 'all' ? allShipments : allShipments.filter(s => s.source === src);
-  renderShipments(filtered, document.getElementById('shipments-table'));
-});
-
-// ─── Load data from single /api/data endpoint (served from KV cache) ───
+// ─── Load ───
 async function loadDashboard() {
   try {
     const res = await fetch('/api/data');
     if (!res.ok) throw new Error(`${res.status}`);
-
     const data = await res.json();
 
-    // Stats
     renderStats(data.stats);
+    renderOrders(data.orders);
+    renderInventory(data.inventory);
+    renderShipments(data.shipments);
 
-    // Orders
-    allOrders = data.orders || [];
-    renderOrderRows(allOrders.slice(0, 10), document.getElementById('recent-orders'));
-    renderOrderRows(allOrders, document.getElementById('orders-table'), true);
-
-    // Inventory
-    allInventory = data.inventory || [];
-    renderInventory(allInventory, document.getElementById('inventory-table'));
-
-    // Shipments
-    allShipments = data.shipments || [];
-    renderShipments(allShipments, document.getElementById('shipments-table'));
-
-    // Status
     const mode = data.mock ? 'Testdata' : 'Live';
-    const syncTime = timeAgo(data.syncedAt);
-    setStatus('online', `${mode} — oppdatert ${syncTime}`);
+    setStatus('online', mode);
 
-    // Show mock banner if needed
     const banner = document.getElementById('mock-banner');
     if (banner) banner.style.display = data.mock ? 'block' : 'none';
 
-  } catch (err) {
-    setStatus('error', 'Kunne ikke hente data');
-    console.error('Dashboard load failed:', err);
+    const syncEl = document.getElementById('last-sync');
+    if (syncEl) {
+      const time = new Intl.DateTimeFormat('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(data.fetchedAt));
+      syncEl.textContent = `Sist oppdatert: ${time}`;
+    }
+  } catch {
+    setStatus('error', 'Frakoblet');
   }
 }
 
 loadDashboard();
-
-// Refresh UI every 30 seconds (data itself syncs every 3 min via cron)
 setInterval(loadDashboard, 30_000);
