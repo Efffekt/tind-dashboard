@@ -21,8 +21,6 @@ async function handleApi(res: http.ServerResponse) {
   // Inline the mock data logic for local dev
   const mock = await import('./src/services/mock.js');
   const orders = mock.getOrders();
-  const inventory = mock.getInventory();
-  const shipments = mock.getShipments();
 
   const shOrders = orders.filter(o => o.source === 'shiphero');
   const pkOrders = orders.filter(o => o.source === 'packiyo');
@@ -33,12 +31,9 @@ async function handleApi(res: http.ServerResponse) {
       totalOrders: orders.length,
       pendingOrders: orders.filter(o => ['pending', 'open', 'processing'].includes(o.status)).length,
       shippedToday: orders.filter(o => o.trackingNumbers.length > 0 && o.updatedAt.startsWith(today)).length,
-      lowStockItems: inventory.filter(i => i.quantityAvailable < 10).length,
       ordersBySource: { shiphero: shOrders.length, packiyo: pkOrders.length },
     },
     orders,
-    inventory,
-    shipments,
     fetchedAt: new Date().toISOString(),
     mock: true,
   };

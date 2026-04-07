@@ -13,10 +13,8 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <!-- Page frame — matches tind-web -->
   <div class="page-frame" aria-hidden="true"><div></div></div>
 
-  <!-- Header bar -->
   <header class="header">
     <div class="container header-inner">
       <a href="/" class="logo">
@@ -24,7 +22,7 @@
         <span class="logo-text">Tind Logistics</span>
       </a>
       <div class="header-center">
-        <span class="header-label">Warehouse Dashboard</span>
+        <span class="header-label">Ordredashboard</span>
         <span class="header-separator">·</span>
         <span class="header-status">
           <span class="status-dot" id="status-dot"></span>
@@ -44,8 +42,8 @@
   <main class="main">
     <div class="container">
 
-      <!-- Hero stats strip — mimics tind-web hero stat row -->
-      <div class="grid-bordered grid-4">
+      <!-- Stat strip -->
+      <div class="grid-bordered grid-stats">
         <div class="grid-cell grid-cell-stat">
           <div class="stat-big font-number" id="stat-total">--</div>
           <div class="stat-big-label">Totale ordrer</div>
@@ -58,73 +56,35 @@
           <div class="stat-big stat-success font-number" id="stat-shipped">--</div>
           <div class="stat-big-label">Sendt i dag</div>
         </div>
-        <div class="grid-cell grid-cell-stat">
-          <div class="stat-big stat-danger font-number" id="stat-lowstock">--</div>
-          <div class="stat-big-label">Lavt lager</div>
+        <div class="grid-cell grid-cell-source">
+          <span class="source-badge badge-shiphero">ShipHero</span>
+          <span class="source-count font-number" id="source-sh-count">--</span>
+        </div>
+        <div class="grid-cell grid-cell-source">
+          <span class="source-badge badge-packiyo">Packiyo</span>
+          <span class="source-count font-number" id="source-pk-count">--</span>
         </div>
       </div>
 
-      <!-- Main content: two columns -->
-      <div class="grid-bordered grid-main">
-
-        <!-- Left column: Orders feed -->
-        <div class="grid-cell grid-cell-orders">
-          <!-- Editorial heading — matches tind-web pattern -->
+      <!-- Orders table -->
+      <div class="grid-bordered grid-orders">
+        <div class="grid-cell grid-cell-full">
           <div class="cell-heading">
-            <p class="cell-label">Sanntid</p>
-            <h2 class="cell-title">Siste ordrer</h2>
+            <div class="cell-heading-left">
+              <p class="cell-label">Sanntid</p>
+              <h2 class="cell-title">Ordrer</h2>
+            </div>
+            <p class="cell-subtitle">Kombinert fra Packiyo og ShipHero</p>
           </div>
           <div class="orders-feed" id="orders-feed">
             <div class="feed-empty">Laster ordrer...</div>
           </div>
-        </div>
-
-        <!-- Right column: Sources + Inventory + Shipments -->
-        <div class="grid-cell-group">
-
-          <!-- Source split -->
-          <div class="grid-bordered grid-2">
-            <div class="grid-cell grid-cell-source">
-              <span class="source-badge badge-shiphero">ShipHero</span>
-              <span class="source-count font-number" id="source-sh-count">--</span>
-              <span class="source-label">ordrer</span>
-            </div>
-            <div class="grid-cell grid-cell-source">
-              <span class="source-badge badge-packiyo">Packiyo</span>
-              <span class="source-count font-number" id="source-pk-count">--</span>
-              <span class="source-label">ordrer</span>
-            </div>
-          </div>
-
-          <!-- Inventory alerts -->
-          <div class="grid-cell grid-cell-section">
-            <div class="cell-heading">
-              <p class="cell-label">Lager</p>
-              <h3 class="cell-title-sm">Lagerbeholdning</h3>
-            </div>
-            <div class="inventory-list" id="inventory-list">
-              <div class="feed-empty">Laster lager...</div>
-            </div>
-          </div>
-
-          <!-- Active shipments -->
-          <div class="grid-cell grid-cell-section">
-            <div class="cell-heading">
-              <p class="cell-label">Frakt</p>
-              <h3 class="cell-title-sm">Aktive forsendelser</h3>
-            </div>
-            <div class="shipments-list" id="shipments-list">
-              <div class="feed-empty">Laster forsendelser...</div>
-            </div>
-          </div>
-
         </div>
       </div>
 
     </div>
   </main>
 
-  <!-- Footer strip — dark, matches tind-web -->
   <footer class="footer">
     <div class="container footer-inner">
       <div class="footer-left">
@@ -143,7 +103,6 @@
 
   <script src="/app.js"></script>
   <script>
-    // Live clock
     function updateClock() {
       const el = document.getElementById('live-clock');
       if (el) el.textContent = new Intl.DateTimeFormat('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date());
