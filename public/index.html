@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard | Tind Logistics</title>
+  <meta name="theme-color" content="#F5F5F3" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap" rel="stylesheet" />
+  <link href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="container header-inner">
+      <div class="logo">
+        <span class="logo-mark">T</span>
+        <span class="logo-text">Tind Dashboard</span>
+      </div>
+      <nav class="nav">
+        <button class="nav-tab active" data-view="overview">Oversikt</button>
+        <button class="nav-tab" data-view="orders">Ordrer</button>
+        <button class="nav-tab" data-view="inventory">Lagerbeholdning</button>
+        <button class="nav-tab" data-view="shipments">Forsendelser</button>
+      </nav>
+      <div class="header-status">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="status-text" id="status-text">Kobler til...</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="mock-banner" class="mock-banner" style="display:none">
+    Viser testdata — koble til API-nokler i Vercel for live data
+  </div>
+
+  <main class="main">
+    <div class="container">
+
+      <!-- Overview -->
+      <section id="view-overview" class="view active">
+        <div class="section-header">
+          <h1 class="heading-1">Oversikt</h1>
+          <p class="subtitle">Kombinert data fra Packiyo og ShipHero</p>
+        </div>
+
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card">
+            <span class="stat-label">Totale ordrer</span>
+            <span class="stat-value font-number" id="stat-total">--</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Ventende</span>
+            <span class="stat-value font-number" id="stat-pending">--</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Sendt i dag</span>
+            <span class="stat-value font-number" id="stat-shipped">--</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Lavt lager</span>
+            <span class="stat-value font-number" id="stat-lowstock">--</span>
+          </div>
+        </div>
+
+        <div class="source-cards">
+          <div class="source-card">
+            <div class="source-header">
+              <span class="source-badge badge-shiphero">ShipHero</span>
+              <span class="font-number" id="source-sh-count">--</span>
+            </div>
+            <p class="source-desc">Ordrer fra ShipHero</p>
+          </div>
+          <div class="source-card">
+            <div class="source-header">
+              <span class="source-badge badge-packiyo">Packiyo</span>
+              <span class="font-number" id="source-pk-count">--</span>
+            </div>
+            <p class="source-desc">Ordrer fra Packiyo</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="heading-3">Siste ordrer</h2>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Ordrenr.</th>
+                  <th>Kilde</th>
+                  <th>Kunde</th>
+                  <th>Status</th>
+                  <th>Antall</th>
+                  <th>Dato</th>
+                </tr>
+              </thead>
+              <tbody id="recent-orders">
+                <tr><td colspan="6" class="empty-state">Laster data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Orders -->
+      <section id="view-orders" class="view">
+        <div class="section-header">
+          <h1 class="heading-1">Ordrer</h1>
+          <div class="filters">
+            <select id="filter-order-source" class="select">
+              <option value="all">Alle kilder</option>
+              <option value="shiphero">ShipHero</option>
+              <option value="packiyo">Packiyo</option>
+            </select>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Ordrenr.</th>
+                  <th>Kilde</th>
+                  <th>Kunde</th>
+                  <th>Status</th>
+                  <th>Antall</th>
+                  <th>Sporing</th>
+                  <th>Opprettet</th>
+                </tr>
+              </thead>
+              <tbody id="orders-table">
+                <tr><td colspan="7" class="empty-state">Laster data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Inventory -->
+      <section id="view-inventory" class="view">
+        <div class="section-header">
+          <h1 class="heading-1">Lagerbeholdning</h1>
+          <div class="filters">
+            <select id="filter-inv-source" class="select">
+              <option value="all">Alle kilder</option>
+              <option value="shiphero">ShipHero</option>
+              <option value="packiyo">Packiyo</option>
+            </select>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Produkt</th>
+                  <th>Kilde</th>
+                  <th>Lager</th>
+                  <th>Pa hand</th>
+                  <th>Tilgjengelig</th>
+                  <th>Allokert</th>
+                </tr>
+              </thead>
+              <tbody id="inventory-table">
+                <tr><td colspan="7" class="empty-state">Laster data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Shipments -->
+      <section id="view-shipments" class="view">
+        <div class="section-header">
+          <h1 class="heading-1">Forsendelser</h1>
+          <div class="filters">
+            <select id="filter-ship-source" class="select">
+              <option value="all">Alle kilder</option>
+              <option value="shiphero">ShipHero</option>
+              <option value="packiyo">Packiyo</option>
+            </select>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Ordrenr.</th>
+                  <th>Kilde</th>
+                  <th>Transportor</th>
+                  <th>Status</th>
+                  <th>Sporing</th>
+                  <th>Sendt</th>
+                  <th>Levert</th>
+                </tr>
+              </thead>
+              <tbody id="shipments-table">
+                <tr><td colspan="7" class="empty-state">Laster data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
