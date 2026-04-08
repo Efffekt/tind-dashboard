@@ -13,10 +13,9 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <!-- Page frame — persistent left/right border lines -->
   <div class="page-frame" aria-hidden="true"><div></div></div>
 
-  <!-- Header — exact match of tind-web Header.astro -->
+  <!-- Header -->
   <header class="header" id="site-header">
     <div class="container header-nav">
       <a href="/" class="logo">
@@ -28,7 +27,7 @@
           <span class="status-dot" id="status-dot"></span>
           <span id="status-text">Kobler til...</span>
         </span>
-        <span class="nav-sep">·</span>
+        <span class="sep">·</span>
         <span class="header-clock font-number" id="live-clock">--:--:--</span>
       </div>
     </div>
@@ -41,71 +40,63 @@
   <main class="main">
     <div class="container main-col">
 
-      <!-- ─── Section 1: Dark hero with big stats ─── -->
-      <!-- Mimics Comparison.astro dark section with bordered grids -->
-      <section class="dark-section">
-        <!-- Editorial heading on dark — matches Comparison heading -->
-        <div class="d-grid d-grid-2">
-          <div class="d-cell d-cell-pad d-cell-end">
-            <p class="d-label">Ordredashboard</p>
-            <h1 class="d-title">Ordrestatus</h1>
-          </div>
-          <div class="d-cell d-cell-pad d-cell-end">
-            <p class="d-subtitle">Kombinert ordreflyt fra Packiyo og ShipHero — oppdateres hvert 3. minutt.</p>
+      <!-- Editorial heading — matches EditorialHeading.astro -->
+      <div class="grid-b grid-2col">
+        <div class="cell cell-bg cell-pad cell-end">
+          <div>
+            <p class="caption">Ordredashboard</p>
+            <h1 class="h2">Ordrestatus</h1>
           </div>
         </div>
-        <!-- Stats strip — matches hero stat row and Comparison proof stats -->
-        <div class="d-grid d-grid-5 no-top">
-          <div class="d-cell d-cell-stat">
-            <p class="d-stat-num font-number" id="stat-total">--</p>
-            <p class="d-stat-label">Totale ordrer</p>
-          </div>
-          <div class="d-cell d-cell-stat">
-            <p class="d-stat-num font-number" id="stat-pending">--</p>
-            <p class="d-stat-label">Ventende</p>
-          </div>
-          <div class="d-cell d-cell-stat">
-            <p class="d-stat-num font-number" id="stat-shipped">--</p>
-            <p class="d-stat-label">Sendt i dag</p>
-          </div>
-          <div class="d-cell d-cell-stat">
-            <div class="d-source">
-              <span class="badge badge-sh">ShipHero</span>
-              <span class="d-source-num font-number" id="source-sh">--</span>
-            </div>
-          </div>
-          <div class="d-cell d-cell-stat">
-            <div class="d-source">
-              <span class="badge badge-pk">Packiyo</span>
-              <span class="d-source-num font-number" id="source-pk">--</span>
-            </div>
-          </div>
+        <div class="cell cell-bg cell-pad cell-end">
+          <p class="body-lg right">Kombinert ordreflyt fra Packiyo og ShipHero — oppdateres hvert 3. minutt.</p>
         </div>
-      </section>
+      </div>
 
-      <!-- ─── Section 2: Orders feed — light bordered grid ─── -->
-      <!-- Mimics ServicesGrid/HowItWorks light section -->
-      <section class="orders-section">
-        <div class="l-grid l-grid-orders">
-          <div class="l-cell orders-cell">
-            <div class="orders-head">
-              <span>Ordre</span>
-              <span>Kunde</span>
-              <span class="text-right">Antall</span>
-              <span>Status</span>
-              <span class="text-right">Tidspunkt</span>
-            </div>
-            <div class="orders-body" id="orders-feed">
-              <div class="feed-empty">Laster ordrer...</div>
-            </div>
+      <!-- Stats strip — matches Hero.astro bottom stat row -->
+      <div class="grid-b grid-5col no-top">
+        <div class="cell cell-white cell-stat">
+          <p class="stat-num font-number" id="stat-total">--</p>
+          <p class="stat-label">Totale ordrer</p>
+        </div>
+        <div class="cell cell-white cell-stat">
+          <p class="stat-num font-number" id="stat-pending">--</p>
+          <p class="stat-label">Ventende</p>
+        </div>
+        <div class="cell cell-white cell-stat">
+          <p class="stat-num font-number" id="stat-shipped">--</p>
+          <p class="stat-label">Sendt i dag</p>
+        </div>
+        <div class="cell cell-white cell-stat">
+          <span class="badge badge-sh">ShipHero</span>
+          <p class="stat-num font-number" id="source-sh">--</p>
+        </div>
+        <div class="cell cell-white cell-stat">
+          <span class="badge badge-pk">Packiyo</span>
+          <p class="stat-num font-number" id="source-pk">--</p>
+        </div>
+      </div>
+
+      <!-- Orders — same grid pattern as ServicesGrid cells -->
+      <div class="grid-b grid-1col no-top orders-wrap">
+        <div class="cell cell-bg orders-cell">
+          <div class="orders-head">
+            <span>Ordre</span>
+            <span>Kunde</span>
+            <span class="r">Antall</span>
+            <span>Status</span>
+            <span class="r">Tidspunkt</span>
+          </div>
+          <div class="orders-body" id="orders-feed">
+            <div class="feed-empty">Laster ordrer...</div>
           </div>
         </div>
-      </section>
+      </div>
 
     </div>
   </main>
 
-  <!-- Footer — matches tind-web Footer.astro dark footer -->
+  <!-- Footer -->
   <footer class="footer">
     <div class="container footer-inner">
       <a href="/" class="footer-logo">
@@ -114,9 +105,9 @@
       </a>
       <div class="footer-meta">
         <span>+47 412 74 141</span>
-        <span class="footer-sep">·</span>
+        <span class="fsep">·</span>
         <span>post@tindlogistics.no</span>
-        <span class="footer-sep">·</span>
+        <span class="fsep">·</span>
         <span id="last-sync">Sist oppdatert: --</span>
       </div>
     </div>
