@@ -11,23 +11,17 @@ function pill(status) {
 }
 
 function stag(source) {
-  const cls = source === 'shiphero' ? 'stag-sh' : 'stag-pk';
-  const label = source === 'shiphero' ? 'SH' : 'PK';
-  return `<span class="stag ${cls}">${label}</span>`;
+  return `<span class="stag ${source === 'shiphero' ? 'stag-sh' : 'stag-pk'}">${source === 'shiphero' ? 'SH' : 'PK'}</span>`;
 }
 
 function fmtTime(d) {
   if (!d) return '–';
   const date = new Date(d);
-  const now = new Date();
-  const diffH = Math.floor((now.getTime() - date.getTime()) / 3600000);
-
-  if (diffH < 1) {
-    const mins = Math.floor((now.getTime() - date.getTime()) / 60000);
-    return mins < 1 ? 'Akkurat na' : `${mins} min siden`;
-  }
+  const diffM = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (diffM < 1) return 'Akkurat na';
+  if (diffM < 60) return `${diffM} min siden`;
+  const diffH = Math.floor(diffM / 60);
   if (diffH < 24) return `${diffH}t siden`;
-
   return new Intl.DateTimeFormat('nb-NO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
@@ -45,18 +39,12 @@ function renderStats(stats) {
 }
 
 function renderOrders(orders) {
-  const feed = document.getElementById('orders-feed');
-  if (!orders.length) {
-    feed.innerHTML = '<div class="feed-empty">Ingen ordrer</div>';
-    return;
-  }
+  const el = document.getElementById('orders-feed');
+  if (!orders.length) { el.innerHTML = '<div class="feed-empty">Ingen ordrer</div>'; return; }
 
-  feed.innerHTML = orders.map(o => `
+  el.innerHTML = orders.map(o => `
     <div class="order-row">
-      <div class="order-id">
-        ${stag(o.source)}
-        <span class="order-number">${o.orderNumber}</span>
-      </div>
+      <div class="order-id">${stag(o.source)}<span class="order-num">${o.orderNumber}</span></div>
       <span class="order-customer">${o.customerName}</span>
       <span class="order-qty font-number">${o.totalItems}</span>
       ${pill(o.status)}
@@ -68,28 +56,22 @@ function renderOrders(orders) {
 async function load() {
   try {
     const res = await fetch('/api/data');
-    if (!res.ok) throw new Error(`${res.status}`);
+    if (!res.ok) throw new Error(res.status);
     const data = await res.json();
 
     renderStats(data.stats);
     renderOrders(data.orders);
-
     setStatus('online', data.mock ? 'Testdata' : 'Live');
-
     document.getElementById('mock-banner').style.display = data.mock ? 'block' : 'none';
 
-    const time = new Intl.DateTimeFormat('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(data.fetchedAt));
-    document.getElementById('last-sync').textContent = `Sist oppdatert: ${time}`;
-  } catch {
-    setStatus('error', 'Frakoblet');
-  }
+    const t = new Intl.DateTimeFormat('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(data.fetchedAt));
+    document.getElementById('last-sync').textContent = `Oppdatert ${t}`;
+  } catch { setStatus('error', 'Frakoblet'); }
 }
 
-// Header scroll effect — matches tind-web
-const header = document.getElementById('site-header');
-window.addEventListener('scroll', () => {
-  if (header) header.classList.toggle('scrolled', window.scrollY > 10);
-}, { passive: true });
+// Header scroll — matches tind-web
+const hdr = document.getElementById('site-header');
+window.addEventListener('scroll', () => { if (hdr) hdr.classList.toggle('scrolled', window.scrollY > 10); }, { passive: true });
 
 load();
 setInterval(load, 30_000);
