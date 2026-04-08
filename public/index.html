@@ -23,10 +23,11 @@
         Tind Logistics
       </a>
       <div class="header-right">
-        <span class="header-status">
-          <span class="status-dot" id="status-dot"></span>
+        <!-- Live pulse — matches Warehouse.astro pill -->
+        <div class="live-pill">
+          <span class="pulse-dot"></span>
           <span id="status-text">Kobler til...</span>
-        </span>
+        </div>
         <span class="sep">·</span>
         <span class="header-clock font-number" id="live-clock">--:--:--</span>
       </div>
@@ -40,54 +41,69 @@
   <main class="main">
     <div class="container main-col">
 
-      <!-- Editorial heading — matches EditorialHeading.astro -->
-      <div class="grid-b grid-2col">
-        <div class="cell cell-bg cell-pad cell-end">
-          <div>
-            <p class="caption">Ordredashboard</p>
-            <h1 class="h2">Ordrestatus</h1>
+      <!-- ── Top section: Mixed grid like Testimonials ── -->
+      <div class="grid-b grid-top">
+
+        <!-- Big hero stat — dark cell like Testimonials dark card -->
+        <div class="cell cell-dark hero-cell">
+          <div class="hero-glow" aria-hidden="true"></div>
+          <div class="hero-content">
+            <p class="hero-label">Totale ordrer</p>
+            <p class="hero-number font-number" id="stat-total">--</p>
+          </div>
+          <div class="hero-sub">
+            <p class="hero-updated" id="hero-date">--</p>
           </div>
         </div>
-        <div class="cell cell-bg cell-pad cell-end">
-          <p class="body-lg right">Kombinert ordreflyt fra Packiyo og ShipHero — oppdateres hvert 3. minutt.</p>
-        </div>
-      </div>
 
-      <!-- Stats strip — matches Hero.astro bottom stat row -->
-      <div class="grid-b grid-5col no-top">
-        <div class="cell cell-white cell-stat">
-          <p class="stat-num font-number" id="stat-total">--</p>
-          <p class="stat-label">Totale ordrer</p>
-        </div>
-        <div class="cell cell-white cell-stat">
+        <!-- Stat cells — white, like Hero stat strip -->
+        <div class="cell cell-white stat-cell">
+          <div class="stat-icon stat-icon-amber">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
           <p class="stat-num font-number" id="stat-pending">--</p>
           <p class="stat-label">Ventende</p>
         </div>
-        <div class="cell cell-white cell-stat">
+
+        <div class="cell cell-white stat-cell">
+          <div class="stat-icon stat-icon-green">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
           <p class="stat-num font-number" id="stat-shipped">--</p>
           <p class="stat-label">Sendt i dag</p>
         </div>
-        <div class="cell cell-white cell-stat">
-          <span class="badge badge-sh">ShipHero</span>
-          <p class="stat-num font-number" id="source-sh">--</p>
+
+        <!-- Source split — bg cell like WhyTind reason cards -->
+        <div class="cell cell-bg source-cell">
+          <div class="source-row">
+            <span class="badge badge-sh">ShipHero</span>
+            <span class="source-num font-number" id="source-sh">--</span>
+          </div>
+          <div class="source-divider"></div>
+          <div class="source-row">
+            <span class="badge badge-pk">Packiyo</span>
+            <span class="source-num font-number" id="source-pk">--</span>
+          </div>
         </div>
-        <div class="cell cell-white cell-stat">
-          <span class="badge badge-pk">Packiyo</span>
-          <p class="stat-num font-number" id="source-pk">--</p>
-        </div>
+
       </div>
 
-      <!-- Orders — same grid pattern as ServicesGrid cells -->
-      <div class="grid-b grid-1col no-top orders-wrap">
+      <!-- ── Orders feed with auto-scroll ── -->
+      <div class="grid-b grid-orders no-top">
         <div class="cell cell-bg orders-cell">
+          <!-- Section label — matches section caption pattern -->
+          <div class="orders-label">
+            <p class="caption">Sanntid</p>
+            <p class="orders-title">Siste ordrer</p>
+          </div>
           <div class="orders-head">
             <span>Ordre</span>
             <span>Kunde</span>
             <span class="r">Antall</span>
             <span>Status</span>
-            <span class="r">Tidspunkt</span>
+            <span class="r">Tid</span>
           </div>
-          <div class="orders-body" id="orders-feed">
+          <div class="orders-scroll" id="orders-feed">
             <div class="feed-empty">Laster ordrer...</div>
           </div>
         </div>
@@ -114,12 +130,5 @@
   </footer>
 
   <script src="/app.js"></script>
-  <script>
-    function tick() {
-      const el = document.getElementById('live-clock');
-      if (el) el.textContent = new Intl.DateTimeFormat('nb-NO', { hour:'2-digit', minute:'2-digit', second:'2-digit' }).format(new Date());
-    }
-    tick(); setInterval(tick, 1000);
-  </script>
 </body>
 </html>
