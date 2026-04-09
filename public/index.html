@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard | Tind Logistics</title>
+  <title>Ordredashboard | Tind Logistics</title>
   <meta name="theme-color" content="#F5F5F3" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -15,117 +15,87 @@
 <body>
   <div class="page-frame" aria-hidden="true"><div></div></div>
 
-  <!-- Header -->
-  <header class="header" id="site-header">
-    <div class="container header-nav">
+  <header class="header">
+    <div class="wrap nav-bar">
       <a href="/" class="logo">
         <img src="/logos/tind-mark.svg" alt="" width="24" height="31" />
         Tind Logistics
       </a>
-      <div class="header-right">
-        <!-- Live pulse — matches Warehouse.astro pill -->
-        <div class="live-pill">
-          <span class="pulse-dot"></span>
-          <span id="status-text">Kobler til...</span>
-        </div>
-        <span class="sep">·</span>
-        <span class="header-clock font-number" id="live-clock">--:--:--</span>
+      <div class="nav-right">
+        <div class="live-dot" id="live-dot"></div>
+        <span class="nav-text" id="status-text">Kobler til</span>
+        <span class="nav-clock font-number" id="clock">--:--</span>
       </div>
     </div>
   </header>
 
-  <div id="mock-banner" class="mock-banner" style="display:none">
-    Viser testdata — koble til API-nokler i Vercel for live data
-  </div>
+  <div id="mock-banner" class="mock-banner" style="display:none">Viser testdata</div>
 
   <main class="main">
-    <div class="container main-col">
+    <div class="wrap">
 
-      <!-- ── Top section: Mixed grid like Testimonials ── -->
-      <div class="grid-b grid-top">
-
-        <!-- Big hero stat — dark cell like Testimonials dark card -->
-        <div class="cell cell-dark hero-cell">
-          <div class="hero-glow" aria-hidden="true"></div>
-          <div class="hero-content">
-            <p class="hero-label">Totale ordrer</p>
-            <p class="hero-number font-number" id="stat-total">--</p>
+      <!-- Hero — like tind-web hero: big text left, context right -->
+      <section class="section hero-section">
+        <div class="grid-b grid-hero">
+          <div class="cell cell-bg hero-left">
+            <p class="tag">Ordredashboard</p>
+            <h1 class="hero-heading">Ordrestatus</h1>
+            <p class="hero-sub">Kombinert fra Packiyo og ShipHero</p>
           </div>
-          <div class="hero-sub">
-            <p class="hero-updated" id="hero-date">--</p>
+          <div class="cell cell-bg hero-right">
+            <div class="hero-stat-group">
+              <div class="hero-stat">
+                <span class="hero-stat-value font-number" id="stat-total">--</span>
+                <span class="hero-stat-label">Totalt</span>
+              </div>
+              <div class="hero-stat">
+                <span class="hero-stat-value font-number" id="stat-pending">--</span>
+                <span class="hero-stat-label">Ventende</span>
+              </div>
+              <div class="hero-stat">
+                <span class="hero-stat-value font-number" id="stat-shipped">--</span>
+                <span class="hero-stat-label">Sendt i dag</span>
+              </div>
+            </div>
           </div>
         </div>
-
-        <!-- Stat cells — white, like Hero stat strip -->
-        <div class="cell cell-white stat-cell">
-          <div class="stat-icon stat-icon-amber">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <!-- Stat bar below hero — like tind-web hero stat strip -->
+        <div class="grid-b grid-stat-bar no-top">
+          <div class="cell cell-white stat-bar-cell">
+            <span class="sbadge sbadge-sh">ShipHero</span>
+            <span class="sval font-number" id="source-sh">--</span>
+            <span class="slabel">ordrer</span>
           </div>
-          <p class="stat-num font-number" id="stat-pending">--</p>
-          <p class="stat-label">Ventende</p>
-        </div>
-
-        <div class="cell cell-white stat-cell">
-          <div class="stat-icon stat-icon-green">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <div class="cell cell-white stat-bar-cell">
+            <span class="sbadge sbadge-pk">Packiyo</span>
+            <span class="sval font-number" id="source-pk">--</span>
+            <span class="slabel">ordrer</span>
           </div>
-          <p class="stat-num font-number" id="stat-shipped">--</p>
-          <p class="stat-label">Sendt i dag</p>
-        </div>
-
-        <!-- Source split — bg cell like WhyTind reason cards -->
-        <div class="cell cell-bg source-cell">
-          <div class="source-row">
-            <span class="badge badge-sh">ShipHero</span>
-            <span class="source-num font-number" id="source-sh">--</span>
-          </div>
-          <div class="source-divider"></div>
-          <div class="source-row">
-            <span class="badge badge-pk">Packiyo</span>
-            <span class="source-num font-number" id="source-pk">--</span>
+          <div class="cell cell-white stat-bar-cell stat-bar-time">
+            <span class="slabel" id="last-sync">Oppdateres hvert 3. minutt</span>
           </div>
         </div>
+      </section>
 
-      </div>
-
-      <!-- ── Orders feed with auto-scroll ── -->
-      <div class="grid-b grid-orders no-top">
-        <div class="cell cell-bg orders-cell">
-          <!-- Section label — matches section caption pattern -->
-          <div class="orders-label">
-            <p class="caption">Sanntid</p>
-            <p class="orders-title">Siste ordrer</p>
-          </div>
-          <div class="orders-head">
-            <span>Ordre</span>
-            <span>Kunde</span>
-            <span class="r">Antall</span>
-            <span>Status</span>
-            <span class="r">Tid</span>
-          </div>
-          <div class="orders-scroll" id="orders-feed">
+      <!-- Orders — clean table in bordered grid -->
+      <section class="section orders-section">
+        <div class="grid-b grid-orders">
+          <div class="cell cell-bg orders-cell" id="orders-feed">
             <div class="feed-empty">Laster ordrer...</div>
           </div>
         </div>
-      </div>
+      </section>
 
     </div>
   </main>
 
-  <!-- Footer -->
   <footer class="footer">
-    <div class="container footer-inner">
-      <a href="/" class="footer-logo">
+    <div class="wrap footer-bar">
+      <div class="footer-left">
         <img src="/logos/tind-mark-white.svg" alt="" width="24" height="31" />
-        Tind Logistics
-      </a>
-      <div class="footer-meta">
-        <span>+47 412 74 141</span>
-        <span class="fsep">·</span>
-        <span>post@tindlogistics.no</span>
-        <span class="fsep">·</span>
-        <span id="last-sync">Sist oppdatert: --</span>
+        <span>Tind Logistics AS</span>
       </div>
+      <span class="footer-right">Org.nr: 930 826 278 · +47 412 74 141</span>
     </div>
   </footer>
 
