@@ -5,7 +5,23 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
+
+// Load .env (simple parser, no deps)
+try {
+  const envContent = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const value = trimmed.slice(eq + 1).trim();
+    if (!process.env[key]) process.env[key] = value;
+  }
+} catch {
+  // .env not present — fine, will use mock
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html',
@@ -16,30 +32,98 @@ const MIME: Record<string, string> = {
   '.png': 'image/png',
 };
 
-// Import the API handler dynamically
+const DISPLAY_LIMIT = 30;
+
+type ServiceResult = {
+  pickable: any[];
+  backordered: any[];
+  truncated: boolean;
+  error?: string;
+};
+
 async function handleApi(res: http.ServerResponse) {
-  // Inline the mock data logic for local dev
-  const mock = await import('./src/services/mock.js');
-  const orders = mock.getOrders();
+  const useMock = !process.env.SHIPHERO_ACCESS_TOKEN && !process.env.PACKIYO_TOKEN;
 
-  const shOrders = orders.filter(o => o.source === 'shiphero');
-  const pkOrders = orders.filter(o => o.source === 'packiyo');
-  const today = new Date().toISOString().slice(0, 10);
+  try {
+    let shResult: ServiceResult;
+    let pkResult: ServiceResult;
 
-  const data = {
-    stats: {
-      totalOrders: orders.length,
-      pendingOrders: orders.filter(o => ['pending', 'open', 'processing'].includes(o.status)).length,
-      shippedToday: orders.filter(o => o.trackingNumbers.length > 0 && o.updatedAt.startsWith(today)).length,
-      ordersBySource: { shiphero: shOrders.length, packiyo: pkOrders.length },
-    },
-    orders,
-    fetchedAt: new Date().toISOString(),
-    mock: true,
-  };
+    if (useMock) {
+      const mock = await import('./src/services/mock.js');
+      const mockOrders = mock.getOrders();
+      const shOrders = mockOrders.filter(o => o.source === 'shiphero');
+      const pkOrders = mockOrders.filter(o => o.source === 'packiyo');
+      shResult = { pickable: shOrders, backordered: [], truncated: false };
+      pkResult = { pickable: pkOrders, backordered: [], truncated: false };
+    } else {
+      const shiphero = await import('./src/services/shiphero.js');
+      const packiyo = await import('./src/services/packiyo.js');
 
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(data));
+      [shResult, pkResult] = await Promise.all([
+        shiphero.getOrders().catch((err: Error) => {
+          console.error('ShipHero error:', err.message);
+          return { pickable: [], backordered: [], truncated: false, error: err.message };
+        }),
+        packiyo.getOrders().catch((err: Error) => {
+          console.error('Packiyo error:', err.message);
+          return { pickable: [], backordered: [], truncated: false, error: err.message };
+        }),
+      ]);
+    }
+
+    const shPickable = shResult.pickable;
+    const pkPickable = pkResult.pickable;
+    const shBackordered = shResult.backordered;
+    const pkBackordered = pkResult.backordered;
+
+    // Display list: only pickable orders. Soft-balance per source so both get airtime,
+    // but if one side has fewer than half, the other backfills the empty slots.
+    const sortByCreated = (a: any, b: any) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    const halfSlot = Math.ceil(DISPLAY_LIMIT / 2);
+    const shSorted = shPickable.slice().sort(sortByCreated);
+    const pkSorted = pkPickable.slice().sort(sortByCreated);
+    const shTake = Math.min(shSorted.length, halfSlot);
+    const pkTake = Math.min(pkSorted.length, DISPLAY_LIMIT - shTake);
+    const shTakeFinal = Math.min(shSorted.length, DISPLAY_LIMIT - pkTake);
+    const orders = [
+      ...shSorted.slice(0, shTakeFinal),
+      ...pkSorted.slice(0, pkTake),
+    ].sort(sortByCreated);
+
+    // Varer å plukke = pickable units (exclude backordered portion) across pickable orders
+    const pickableUnits = [...shPickable, ...pkPickable].reduce(
+      (sum, o) => sum + Math.max(0, (o.totalItems || 0) - (o.backorderedItems || 0)),
+      0
+    );
+
+    const data = {
+      stats: {
+        activeOrders: shPickable.length + pkPickable.length,
+        backorderedOrders: shBackordered.length + pkBackordered.length,
+        totalItems: pickableUnits,
+        ordersBySource: {
+          shiphero: shPickable.length,
+          packiyo: pkPickable.length,
+        },
+      },
+      orders,
+      truncated: shResult.truncated || pkResult.truncated,
+      errors: {
+        shiphero: shResult.error ?? null,
+        packiyo: pkResult.error ?? null,
+      },
+      fetchedAt: new Date().toISOString(),
+      mock: useMock,
+    };
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+  } catch (err) {
+    console.error('API error:', err);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Failed to fetch orders', detail: String(err) }));
+  }
 }
 
 const server = http.createServer(async (req, res) => {

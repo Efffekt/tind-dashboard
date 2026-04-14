@@ -7,7 +7,8 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
   customerName: string;
-  totalItems: number;
+  totalItems: number;          // total pending units (includes any backordered)
+  backorderedItems?: number;   // subset of totalItems that is on backorder
   trackingNumbers: string[];
 }
 

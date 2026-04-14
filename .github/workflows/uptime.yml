@@ -1,0 +1,131 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Uptime check for the Tind Dashboard
+#
+# Hits /api/data on the deployed Vercel function every 5 minutes and fails
+# the workflow (→ GitHub sends an email to the repo owner) if:
+#   - the endpoint is unreachable or returns non-200
+#   - the response JSON has `errors.shiphero` or `errors.packiyo` set
+#   - the dashboard is running in mock mode (Vercel env vars missing)
+#
+# Truncation warnings (`truncated: true`) are surfaced as a non-fatal
+# workflow warning, not a failure — the dashboard still works, it just
+# couldn't fetch a complete picture.
+#
+# ─────────────────────────────────────────────────────────────────────────
+# SETUP (one-time, after deploying to Vercel)
+#
+#   1. Go to the repo on GitHub → Settings → Secrets and variables → Actions
+#   2. Open the "Variables" tab
+#   3. Add a repository variable: DASHBOARD_URL = https://<your-app>.vercel.app
+#      (no trailing slash)
+#   4. That's it — the workflow picks it up automatically.
+#
+# ─────────────────────────────────────────────────────────────────────────
+# COST NOTE (GitHub Actions minutes)
+#
+# Every run is billed as 1 full minute even if it finishes in 5 seconds.
+# Default schedule below is '*/30' (every 30 minutes) which stays inside
+# the 2,000 min/month GitHub Actions free tier on private repos.
+#
+#   schedule    runs/day   min/month   Private repo (2000 free/mo)
+#   ─────────   ────────   ─────────   ────────────────────────────
+#   */5         288        ~8,640      over free tier by ~6,640 → ~$53/mo
+#   */15        96         ~2,880      over free tier by ~880   → ~$7/mo
+#   */30        48         ~1,440      under free tier          → free  ← default
+#
+# If you make the repo public OR upgrade to a plan with more Actions
+# minutes and want faster outage detection, change '*/30 * * * *' below
+# to '*/5 * * * *'.
+#
+# ─────────────────────────────────────────────────────────────────────────
+
+name: Uptime check
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # allow manual trigger from the Actions tab for testing
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify /api/data is healthy
+        env:
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+        run: |
+          set -eo pipefail
+
+          if [ -z "$DASHBOARD_URL" ]; then
+            echo "::error::DASHBOARD_URL variable is not set."
+            echo "::error::Set it in repo Settings → Secrets and variables → Actions → Variables."
+            echo "::error::Example value: https://tind-dashboard.vercel.app"
+            exit 1
+          fi
+
+          echo "Pinging $DASHBOARD_URL/api/data"
+
+          # --max-time gives us a hard ceiling; --fail makes curl exit non-zero on 4xx/5xx
+          HTTP_CODE=$(curl -s -o /tmp/body.json -w "%{http_code}" --max-time 20 "$DASHBOARD_URL/api/data" || echo "000")
+
+          if [ "$HTTP_CODE" = "000" ]; then
+            echo "::error title=Dashboard unreachable::curl failed to connect to $DASHBOARD_URL/api/data"
+            exit 1
+          fi
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error title=Bad HTTP status::Got HTTP $HTTP_CODE from $DASHBOARD_URL/api/data"
+            echo "--- Response body (first 500 chars) ---"
+            head -c 500 /tmp/body.json
+            echo
+            exit 1
+          fi
+
+          # Validate JSON shape before we jq into it
+          if ! jq empty /tmp/body.json 2>/dev/null; then
+            echo "::error title=Invalid response::Response is not valid JSON"
+            echo "--- Response body (first 500 chars) ---"
+            head -c 500 /tmp/body.json
+            echo
+            exit 1
+          fi
+
+          SH_ERR=$(jq -r '.errors.shiphero // "null"' /tmp/body.json)
+          PK_ERR=$(jq -r '.errors.packiyo // "null"' /tmp/body.json)
+          ACTIVE=$(jq -r '.stats.activeOrders // 0' /tmp/body.json)
+          ITEMS=$(jq -r '.stats.totalItems // 0' /tmp/body.json)
+          BY_SH=$(jq -r '.stats.ordersBySource.shiphero // 0' /tmp/body.json)
+          BY_PK=$(jq -r '.stats.ordersBySource.packiyo // 0' /tmp/body.json)
+          MOCK=$(jq -r '.mock // false' /tmp/body.json)
+          TRUNCATED=$(jq -r '.truncated // false' /tmp/body.json)
+
+          FAILED=0
+
+          if [ "$SH_ERR" != "null" ]; then
+            echo "::error title=ShipHero error::$SH_ERR"
+            FAILED=1
+          fi
+
+          if [ "$PK_ERR" != "null" ]; then
+            echo "::error title=Packiyo error::$PK_ERR"
+            FAILED=1
+          fi
+
+          if [ "$MOCK" = "true" ]; then
+            echo "::error title=Mock mode::Dashboard is serving mock data — Vercel env vars are not set"
+            FAILED=1
+          fi
+
+          if [ "$TRUNCATED" = "true" ]; then
+            echo "::warning title=Data truncated::Dashboard flagged truncated=true — some data may be incomplete (hit a pagination cap or detected schema drift)"
+          fi
+
+          if [ $FAILED -eq 1 ]; then
+            exit 1
+          fi
+
+          echo "✓ Dashboard healthy"
+          echo "  Active orders:  $ACTIVE  (SH $BY_SH / PK $BY_PK)"
+          echo "  Items to pick:  $ITEMS"
+          echo "  Truncated:      $TRUNCATED"

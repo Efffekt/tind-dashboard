@@ -8,6 +8,5 @@ export const config = {
   packiyo: {
     baseUrl: process.env.PACKIYO_BASE_URL || '',
     token: process.env.PACKIYO_TOKEN || '',
-    customerId: process.env.PACKIYO_CUSTOMER_ID || '',
   },
 };

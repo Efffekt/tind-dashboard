@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap" rel="stylesheet" />
   <link href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=3" />
 </head>
 <body>
   <div class="page-frame" aria-hidden="true"><div></div></div>
@@ -24,12 +24,14 @@
       <div class="nav-right">
         <div class="live-dot" id="live-dot"></div>
         <span class="nav-text" id="status-text">Kobler til</span>
+        <span class="nav-text nav-sync" id="last-sync"></span>
         <span class="nav-clock font-number" id="clock">--:--</span>
       </div>
     </div>
   </header>
 
   <div id="mock-banner" class="mock-banner" style="display:none">Viser testdata</div>
+  <div id="trunc-banner" class="trunc-banner" style="display:none">⚠ Sidetaket er nådd — ikke alle aktive ordre vises</div>
 
   <main class="main">
     <div class="wrap">
@@ -39,40 +41,29 @@
         <div class="grid-b grid-hero">
           <div class="cell cell-bg hero-left">
             <p class="tag">Ordredashboard</p>
-            <h1 class="hero-heading">Ordrestatus</h1>
-            <p class="hero-sub">Kombinert fra Packiyo og ShipHero</p>
+            <h1 class="hero-heading">Aktive ordrer</h1>
+            <p class="hero-sub">Live oversikt fra Packiyo og ShipHero</p>
           </div>
-          <div class="cell cell-bg hero-right">
-            <div class="hero-stat-group">
-              <div class="hero-stat">
-                <span class="hero-stat-value font-number" id="stat-total">--</span>
-                <span class="hero-stat-label">Totalt</span>
-              </div>
-              <div class="hero-stat">
-                <span class="hero-stat-value font-number" id="stat-pending">--</span>
-                <span class="hero-stat-label">Ventende</span>
-              </div>
-              <div class="hero-stat">
-                <span class="hero-stat-value font-number" id="stat-shipped">--</span>
-                <span class="hero-stat-label">Sendt i dag</span>
-              </div>
-            </div>
+          <div class="cell cell-bg hero-stat">
+            <span class="hero-stat-value font-number" id="stat-active">--</span>
+            <span class="hero-stat-label">aktive ordre</span>
+          </div>
+          <div class="cell cell-bg hero-stat">
+            <span class="hero-stat-value font-number" id="stat-items">--</span>
+            <span class="hero-stat-label">varer å plukke</span>
           </div>
         </div>
-        <!-- Stat bar below hero — like tind-web hero stat strip -->
+        <!-- Stat bar below hero — 50/50 per-source split -->
         <div class="grid-b grid-stat-bar no-top">
-          <div class="cell cell-white stat-bar-cell">
+          <div class="cell cell-white stat-bar-cell" id="cell-sh">
             <span class="sbadge sbadge-sh">ShipHero</span>
             <span class="sval font-number" id="source-sh">--</span>
-            <span class="slabel">ordrer</span>
+            <span class="slabel" id="slabel-sh">aktive ordrer</span>
           </div>
-          <div class="cell cell-white stat-bar-cell">
+          <div class="cell cell-white stat-bar-cell" id="cell-pk">
             <span class="sbadge sbadge-pk">Packiyo</span>
             <span class="sval font-number" id="source-pk">--</span>
-            <span class="slabel">ordrer</span>
-          </div>
-          <div class="cell cell-white stat-bar-cell stat-bar-time">
-            <span class="slabel" id="last-sync">Oppdateres hvert 3. minutt</span>
+            <span class="slabel" id="slabel-pk">aktive ordrer</span>
           </div>
         </div>
       </section>
@@ -99,6 +90,6 @@
     </div>
   </footer>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=3"></script>
 </body>
 </html>

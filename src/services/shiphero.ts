@@ -1,190 +1,335 @@
 import { config } from '../config.js';
-import type { Order, InventoryItem, Shipment } from '../types/index.js';
+import type { Order } from '../types/index.js';
 
-const { endpoint, accessToken } = config.shiphero;
+const { endpoint } = config.shiphero;
 
-async function query<T>(gql: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = await fetch(endpoint, {
+// In-memory token state. On Vercel this is per-warm-instance; cold starts begin
+// with the env token. Refresh kicks in automatically on 401.
+let currentAccessToken = config.shiphero.accessToken;
+let refreshInFlight: Promise<string> | null = null;
+
+const IGNORED_SHOP_SLUGS = new Set(['xserc9-vd']); // test/demo stores to hide
+
+function cleanShopName(raw: string | null | undefined): string {
+  if (!raw) return 'Ukjent';
+  const cleaned = raw
+    .replace(/\.myshopify\.com$/i, '')
+    .replace(/\.shopify\.com$/i, '')
+    .replace(/[-_]/g, ' ')
+    .trim();
+  return cleaned
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+function shopSlug(raw: string | null | undefined): string {
+  if (!raw) return '';
+  return raw.replace(/\.myshopify\.com$/i, '').replace(/\.shopify\.com$/i, '').toLowerCase();
+}
+
+export type OrdersResult = {
+  pickable: Order[];
+  backordered: Order[];
+  truncated: boolean;  // true when ShipHero's 100-edge cap was hit, or a refetch failed
+  error?: string;      // set when the service could not fully deliver a result
+};
+
+const FETCH_TIMEOUT_MS = 15_000;
+
+async function refreshAccessToken(): Promise<string> {
+  // Dedupe concurrent refresh calls — multiple in-flight requests share one auth call.
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const res = await fetch('https://public-api.shiphero.com/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: config.shiphero.refreshToken }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`ShipHero token refresh failed: ${res.status} ${body}`);
+    }
+    const json = (await res.json()) as { access_token: string; expires_in: number };
+    currentAccessToken = json.access_token;
+    console.log(`ShipHero token refreshed (valid for ${Math.round(json.expires_in / 86400)} days)`);
+    return currentAccessToken;
+  })();
+  try {
+    return await refreshInFlight;
+  } finally {
+    // Clear the lock so a later 401 can trigger a fresh refresh
+    refreshInFlight = null;
+  }
+}
+
+async function rawQuery(token: string, gql: string, variables?: Record<string, unknown>) {
+  return fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`,
+      'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({ query: gql, variables }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
+}
+
+async function query<T>(gql: string, variables?: Record<string, unknown>): Promise<T> {
+  let res = await rawQuery(currentAccessToken, gql, variables);
+
+  // 401 → refresh the access token using the refresh token, then retry once.
+  if (res.status === 401) {
+    await refreshAccessToken();
+    res = await rawQuery(currentAccessToken, gql, variables);
+  }
 
   if (!res.ok) {
     throw new Error(`ShipHero API error: ${res.status} ${res.statusText}`);
   }
 
-  const json = await res.json() as { data: T; errors?: { message: string }[] };
+  const json = (await res.json()) as { data: T; errors?: { message: string }[] };
   if (json.errors?.length) {
-    throw new Error(`ShipHero GraphQL error: ${json.errors[0].message}`);
+    const msg = json.errors[0].message;
+    // An expired-token error sometimes comes through as a GraphQL error instead of 401.
+    if (/token|unauthor|expired|jwt/i.test(msg)) {
+      await refreshAccessToken();
+      const retry = await rawQuery(currentAccessToken, gql, variables);
+      if (!retry.ok) throw new Error(`ShipHero API error after refresh: ${retry.status}`);
+      const retryJson = (await retry.json()) as { data: T; errors?: { message: string }[] };
+      if (retryJson.errors?.length) throw new Error(`ShipHero GraphQL error: ${retryJson.errors[0].message}`);
+      return retryJson.data;
+    }
+    throw new Error(`ShipHero GraphQL error: ${msg}`);
   }
 
   return json.data;
 }
 
-export async function getOrders(limit = 25): Promise<Order[]> {
-  const data = await query<{
+type OrderNode = {
+  id: string;
+  order_number: string;
+  fulfillment_status: string | null;
+  shop_name: string | null;
+  created_at: string;
+  updated_at: string;
+  line_items: {
+    pageInfo: { hasNextPage: boolean };
+    edges: { node: { quantity_pending_fulfillment: number | null; backorder_quantity: number | null } }[];
+  };
+  shipments: { shipping_labels: { tracking_number: string | null }[] }[];
+};
+
+function toOrder(node: OrderNode): Order {
+  const trackingNumbers = (node.shipments ?? []).flatMap(shipment =>
+    (shipment.shipping_labels ?? [])
+      .map(label => label.tracking_number)
+      .filter((t): t is string => Boolean(t))
+  );
+
+  const totalItems = node.line_items.edges.reduce(
+    (sum, e) => sum + (e.node.quantity_pending_fulfillment ?? 0),
+    0
+  );
+  const backorderedItems = node.line_items.edges.reduce(
+    (sum, e) => sum + (e.node.backorder_quantity ?? 0),
+    0
+  );
+
+  return {
+    id: node.id,
+    source: 'shiphero' as const,
+    orderNumber: node.order_number,
+    // Normalize custom 3PL status values ("Skinsecret B2B", "Lager VM", etc.) to "pending"
+    // for display — from the warehouse TV's perspective these are all "ready to pick".
+    status: 'pending',
+    createdAt: node.created_at,
+    updatedAt: node.updated_at,
+    customerName: cleanShopName(node.shop_name),
+    totalItems,
+    backorderedItems,
+    trackingNumbers,
+  };
+}
+
+const ORDER_FIELDS = `
+  id
+  order_number
+  fulfillment_status
+  shop_name
+  created_at
+  updated_at
+  line_items(first: 25) {
+    pageInfo { hasNextPage }
+    edges {
+      node {
+        quantity_pending_fulfillment
+        backorder_quantity
+      }
+    }
+  }
+  shipments {
+    shipping_labels {
+      tracking_number
+    }
+  }
+`;
+
+export async function getOrders(): Promise<OrdersResult> {
+  // Use ready_to_ship: true — the correct "active" filter for 3PL accounts that
+  // use custom fulfillment_status values (e.g. "Skinsecret B2C", "Lager VM").
+  // Those orders would never match a literal fulfillment_status: "pending" filter.
+  type OrdersShape = {
     orders: {
       data: {
-        edges: {
-          node: {
-            id: string;
-            order_number: string;
-            fulfillment_status: string;
-            created_at: string;
-            updated_at: string;
-            shipping_address: { name: string } | null;
-            line_items: { edges: { node: { id: string } }[] };
-            shipments: { tracking_number: string }[];
-          };
-        }[];
+        pageInfo: { hasNextPage: boolean };
+        edges: { node: OrderNode }[];
       };
     };
-  }>(`
-    query GetOrders($first: Int) {
-      orders(first: $first) {
+  };
+
+  const res = await query<OrdersShape>(
+    `query GetPickableOrders {
+      orders(ready_to_ship: true) {
         data {
-          edges {
-            node {
-              id
-              order_number
-              fulfillment_status
-              created_at
-              updated_at
-              shipping_address {
-                name
-              }
-              line_items {
-                edges {
-                  node {
-                    id
+          pageInfo { hasNextPage }
+          edges { node { ${ORDER_FIELDS} } }
+        }
+      }
+    }`
+  );
+
+  const hasNextPage = !!res.orders.data.pageInfo?.hasNextPage;
+  if (hasNextPage) {
+    console.warn(
+      `ShipHero: ready_to_ship query hit the 100-edge page cap — some pickable orders are not counted`
+    );
+  }
+
+  const isAllowed = (n: OrderNode) => !IGNORED_SHOP_SLUGS.has(shopSlug(n.shop_name));
+  const filteredNodes = res.orders.data.edges.map(e => e.node).filter(isAllowed);
+  const pickable = filteredNodes.map(toOrder);
+
+  // For orders with >25 line items (our first:25 cap), refetch them individually
+  // with first:100 so totalItems is accurate. The per-order `order(id:...)` query
+  // is cheap (~102 credits each) and only runs when truncation is actually detected.
+  const truncatedNodes = filteredNodes.filter(n => n.line_items.pageInfo?.hasNextPage);
+  let stillTruncated = false;
+
+  if (truncatedNodes.length > 0) {
+    console.log(
+      `ShipHero: refetching line_items for ${truncatedNodes.length} order(s) with >25 line items: ${truncatedNodes.map(n => n.order_number).join(', ')}`
+    );
+
+    type SingleOrderPageShape = {
+      order: {
+        data: {
+          id: string;
+          line_items: {
+            pageInfo: { hasNextPage: boolean; endCursor: string | null };
+            edges: {
+              node: {
+                quantity_pending_fulfillment: number | null;
+                backorder_quantity: number | null;
+              };
+            }[];
+          };
+        };
+      };
+    };
+
+    // Fully paginate line_items for a single order using the `after` cursor.
+    // ShipHero's `Order.line_items(first, after)` supports cursors, so we can
+    // always reach the true total regardless of how many SKUs are on the order.
+    async function fetchAllLineItems(orderId: string) {
+      let totalItems = 0;
+      let backorderedItems = 0;
+      let after: string | null = null;
+      let pages = 0;
+      const MAX_PAGES = 50; // 50 * 100 = 5000 line items — sanity cap
+
+      while (pages < MAX_PAGES) {
+        pages++;
+        const res: SingleOrderPageShape = await query<SingleOrderPageShape>(
+          `query GetOrderLineItems($id: String!, $after: String) {
+            order(id: $id) {
+              data {
+                id
+                line_items(first: 100, after: $after) {
+                  pageInfo { hasNextPage endCursor }
+                  edges {
+                    node {
+                      quantity_pending_fulfillment
+                      backorder_quantity
+                    }
                   }
                 }
               }
-              shipments {
-                tracking_number
-              }
             }
-          }
+          }`,
+          { id: orderId, after }
+        );
+        const page = res.order.data.line_items;
+        for (const e of page.edges) {
+          totalItems += e.node.quantity_pending_fulfillment ?? 0;
+          backorderedItems += e.node.backorder_quantity ?? 0;
         }
+        if (!page.pageInfo?.hasNextPage) break;
+        if (!page.pageInfo?.endCursor) break; // defensive
+        after = page.pageInfo.endCursor;
       }
+
+      const exhaustedCap = pages >= MAX_PAGES;
+      return { totalItems, backorderedItems, exhaustedCap };
     }
-  `, { first: limit });
 
-  return data.orders.data.edges.map(({ node }) => ({
-    id: node.id,
-    source: 'shiphero' as const,
-    orderNumber: node.order_number,
-    status: node.fulfillment_status,
-    createdAt: node.created_at,
-    updatedAt: node.updated_at,
-    customerName: node.shipping_address?.name || 'Unknown',
-    totalItems: node.line_items.edges.length,
-    trackingNumbers: node.shipments.map(s => s.tracking_number).filter(Boolean),
-  }));
-}
-
-export async function getInventory(): Promise<InventoryItem[]> {
-  const data = await query<{
-    warehouse_products: {
-      data: {
-        edges: {
-          node: {
-            id: string;
-            sku: string;
-            product: { name: string };
-            on_hand: number;
-            available: number;
-            allocated: number;
-            warehouse: { name: string };
+    const refetches = await Promise.all(
+      truncatedNodes.map(async n => {
+        try {
+          const { totalItems, backorderedItems, exhaustedCap } = await fetchAllLineItems(n.id);
+          return {
+            ok: true as const,
+            id: n.id,
+            totalItems,
+            backorderedItems,
+            stillMore: exhaustedCap,
           };
-        }[];
-      };
-    };
-  }>(`
-    query GetInventory {
-      warehouse_products(first: 50) {
-        data {
-          edges {
-            node {
-              id
-              sku
-              product {
-                name
-              }
-              on_hand
-              available
-              allocated
-              warehouse {
-                name
-              }
-            }
-          }
+        } catch (err) {
+          console.error(`ShipHero: refetch failed for order ${n.order_number}:`, err);
+          return { ok: false as const, id: n.id };
         }
+      })
+    );
+
+    const successes = refetches.filter((r): r is Extract<typeof r, { ok: true }> => r.ok);
+    const failures = refetches.filter(r => !r.ok);
+    const byId = new Map(successes.map(r => [r.id, r]));
+
+    // Override the affected orders with the corrected totals
+    for (const order of pickable) {
+      const refreshed = byId.get(order.id);
+      if (refreshed) {
+        order.totalItems = refreshed.totalItems;
+        order.backorderedItems = refreshed.backorderedItems;
       }
     }
-  `);
 
-  return data.warehouse_products.data.edges.map(({ node }) => ({
-    id: node.id,
-    source: 'shiphero' as const,
-    sku: node.sku,
-    productName: node.product.name,
-    quantityOnHand: node.on_hand,
-    quantityAvailable: node.available,
-    quantityAllocated: node.allocated,
-    warehouse: node.warehouse.name,
-  }));
-}
-
-export async function getShipments(): Promise<Shipment[]> {
-  const data = await query<{
-    shipments: {
-      data: {
-        edges: {
-          node: {
-            id: string;
-            order_number: string;
-            shipping_status: string;
-            carrier: string;
-            tracking_number: string;
-            shipped_at: string | null;
-            delivered_at: string | null;
-          };
-        }[];
-      };
-    };
-  }>(`
-    query GetShipments {
-      shipments(first: 25) {
-        data {
-          edges {
-            node {
-              id
-              order_number
-              shipping_status
-              carrier
-              tracking_number
-              shipped_at
-              delivered_at
-            }
-          }
-        }
-      }
+    // Flag as truncated if:
+    //  - first:100 still wasn't enough (orders with >100 distinct line items), OR
+    //  - any refetch failed (we kept the undercounted value for those orders)
+    const someFirstHundredExhausted = successes.some(r => r.stillMore);
+    stillTruncated = someFirstHundredExhausted || failures.length > 0;
+    if (someFirstHundredExhausted) {
+      console.warn(`ShipHero: some orders have >100 line items, still undercounting`);
     }
-  `);
+    if (failures.length > 0) {
+      console.warn(
+        `ShipHero: ${failures.length} line-item refetch(es) failed; totalItems undercounted for those orders`
+      );
+    }
+  }
 
-  return data.shipments.data.edges.map(({ node }) => ({
-    id: node.id,
-    source: 'shiphero' as const,
-    orderNumber: node.order_number,
-    status: node.shipping_status,
-    carrier: node.carrier,
-    trackingNumber: node.tracking_number,
-    shippedAt: node.shipped_at,
-    deliveredAt: node.delivered_at,
-  }));
+  const truncated = hasNextPage || stillTruncated;
+  return { pickable, backordered: [], truncated };
 }
