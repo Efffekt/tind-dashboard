@@ -1,18 +1,31 @@
-/** Unified order representation across both platforms */
+// ─────────────────────────────────────────────────────────────────────────
+// types/index.ts — Delte TypeScript-typer brukt på tvers av tjenestene
+//
+// Hovedpoenget med denne fila er å ha ÉN felles Order-type som både
+// ShipHero og Packiyo mapper til. Det gjør at api/data.ts og dev-server.ts
+// kan behandle ordre fra begge kilder som samme datatype.
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Felles ordre-representasjon på tvers av ShipHero og Packiyo.
+ * Begge tjenester (shiphero.ts og packiyo.ts) oversetter sine egne
+ * interne former til denne typen før de returneres.
+ */
 export interface Order {
   id: string;
   source: 'shiphero' | 'packiyo';
-  orderNumber: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  customerName: string;
-  totalItems: number;          // total pending units (includes any backordered)
-  backorderedItems?: number;   // subset of totalItems that is on backorder
-  trackingNumbers: string[];
+  orderNumber: string;         // ordre-nummeret som operatørene kjenner (f.eks. "#4763" eller "1182334")
+  status: string;              // normalisert status ("pending", "fulfilled", osv.)
+  createdAt: string;           // ISO-8601 tidsstempel for når ordren ble opprettet
+  updatedAt: string;           // ISO-8601 tidsstempel for siste endring
+  customerName: string;        // TENANT-navn, ikke kjøpernavn (f.eks. "Lampefokus", "Sweats.no")
+  totalItems: number;          // antall enheter som venter på å sendes (inkluderer backordered-delen)
+  backorderedItems?: number;   // delmengden av totalItems som er på restordre
+  trackingNumbers: string[];   // ev. sporings-numre fra etiketter (kan være tom)
 }
 
-/** Unified inventory item */
+/** Felles lagerbeholdnings-type. Brukes ikke i dashbordet foreløpig
+ *  (vi har ingen UI for lager), men beholdes i typen i tilfelle fremtidig bruk. */
 export interface InventoryItem {
   id: string;
   source: 'shiphero' | 'packiyo';
@@ -24,7 +37,8 @@ export interface InventoryItem {
   warehouse: string;
 }
 
-/** Unified shipment */
+/** Felles forsendelse-type. Heller ikke i aktivt bruk for TV-visningen,
+ *  men definert for konsistens. */
 export interface Shipment {
   id: string;
   source: 'shiphero' | 'packiyo';
@@ -36,7 +50,8 @@ export interface Shipment {
   deliveredAt: string | null;
 }
 
-/** Dashboard summary stats */
+/** Dashbord-oppsummering. Ikke direkte brukt (api/data.ts bygger
+ *  sitt eget stats-objekt inline), men dokumenterer forventet form. */
 export interface DashboardStats {
   totalOrders: number;
   pendingOrders: number;

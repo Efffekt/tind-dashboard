@@ -1,9 +1,27 @@
+// ─────────────────────────────────────────────────────────────────────────
+// mock.ts — Test-data som brukes når API-tokens ikke er satt
+//
+// Brukes i to tilfeller:
+//   1. Lokal utvikling uten .env (nye utviklere kan kjøre npm run dev
+//      uten å først skaffe ekte tokens)
+//   2. Vercel-deploy der env vars ved et uhell ikke er satt — da ser
+//      man dashbordet fungerer, bare med falske tall + gult "Viser
+//      testdata"-banner
+//
+// Data er håndskrevet med norske navn og realistiske tidsstempler
+// slik at UI-et ser troverdig ut under utvikling.
+// ─────────────────────────────────────────────────────────────────────────
+
 import type { Order, InventoryItem, Shipment } from '../types/index.js';
 
+// Hjelpere for å generere ISO-tidsstempler relativt til nå.
 const now = new Date();
 const daysAgo = (n: number) => new Date(now.getTime() - n * 86400000).toISOString();
 const hoursAgo = (n: number) => new Date(now.getTime() - n * 3600000).toISOString();
 
+// Returnerer 10 eksempel-ordre (5 fra hver kilde) med blandede statuser
+// slik at alle tilstander i UI-et (Ventende/Sendt/Fullfort/Levert/Kansellert)
+// blir testet samtidig.
 export function getOrders(): Order[] {
   return [
     { id: 'sh-1001', source: 'shiphero', orderNumber: 'SH-10421', status: 'fulfilled', createdAt: hoursAgo(2), updatedAt: hoursAgo(1), customerName: 'Kari Nordmann', totalItems: 3, trackingNumbers: ['SP1234567890'] },

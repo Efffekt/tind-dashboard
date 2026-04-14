@@ -1,4 +1,20 @@
 <!DOCTYPE html>
+<!--
+  ─────────────────────────────────────────────────────────────────────────
+  index.html — Struktur for Tind-dashbordet
+  ─────────────────────────────────────────────────────────────────────────
+
+  Layoutet består av:
+    1. Header (fast øverst):    logo, "Live"-indikator, sync-tid, klokke
+    2. Banner-område (skjult):  gult "testdata" og rødt "truncated"-banner
+    3. Hero-seksjonen:          3-kol grid — tittel | aktive ordre | varer å plukke
+    4. Stat-bar (under hero):   2-kol grid — ShipHero | Packiyo per-kilde-tall
+    5. Orders-seksjonen:        live-listen med ~30 ordre, rullende
+    6. Footer:                  Tind-logo og firmainfo
+
+  Alle tallene starter som "--" og fylles inn av app.js når /api/data
+  har svart. ID-ene på elementene er det app.js refererer til.
+-->
 <html lang="nb">
 <head>
   <meta charset="UTF-8" />
@@ -6,60 +22,97 @@
   <title>Ordredashboard | Tind Logistics</title>
   <meta name="theme-color" content="#F5F5F3" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+  <!-- Font-lasting: Inter for brødtekst + Clash Display for tall/overskrifter -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap" rel="stylesheet" />
   <link href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap" rel="stylesheet" />
+
+  <!-- ?v=3 = cache-busting: bump dette nummeret ved hver deploy
+       slik at nettlesere på TV-ene laster ny CSS uten hard reload. -->
   <link rel="stylesheet" href="/styles.css?v=3" />
 </head>
 <body>
+  <!-- Sveits-inspirerte side-kanter (1px border-left/right på wrap) -->
   <div class="page-frame" aria-hidden="true"><div></div></div>
 
+  <!-- ─── HEADER ─────────────────────────────────────────────────── -->
   <header class="header">
     <div class="wrap nav-bar">
+      <!-- Venstre: logo + navn -->
       <a href="/" class="logo">
         <img src="/logos/tind-mark.svg" alt="" width="24" height="31" />
         Tind Logistics
       </a>
+      <!-- Høyre: live-indikator + status-tekst + sist oppdatert + klokke -->
       <div class="nav-right">
+        <!-- Grønn pulserende prikk når alt er OK, rød når begge kilder er nede -->
         <div class="live-dot" id="live-dot"></div>
+        <!-- "Live" / "Testdata" / "Frakoblet" — settes av app.js -->
         <span class="nav-text" id="status-text">Kobler til</span>
+        <!-- "Oppdatert HH:MM" — settes av app.js etter hver vellykket henting -->
         <span class="nav-text nav-sync" id="last-sync"></span>
+        <!-- Digital klokke som oppdateres hvert sekund (lokal tid) -->
         <span class="nav-clock font-number" id="clock">--:--</span>
       </div>
     </div>
   </header>
 
+  <!-- ─── BANNERE (skjulte som default) ──────────────────────────── -->
+
+  <!-- Gult banner: vises når Vercel env vars mangler og vi bruker mock-data -->
   <div id="mock-banner" class="mock-banner" style="display:none">Viser testdata</div>
+
+  <!-- Rødt banner: vises når data er ufullstendig (pagineringstak, skjemadrift, refetch-feil) -->
   <div id="trunc-banner" class="trunc-banner" style="display:none">⚠ Sidetaket er nådd — ikke alle aktive ordre vises</div>
 
+  <!-- ─── HOVED-INNHOLD ──────────────────────────────────────────── -->
   <main class="main">
     <div class="wrap">
 
-      <!-- Hero — like tind-web hero: big text left, context right -->
+      <!-- ─── HERO-SEKSJONEN (øverste store blokka) ──────────────── -->
+      <!--
+        3-kolonners grid med like store celler:
+          [1] Tittel-celle: Ordredashboard-merkelapp + overskrift + undertekst
+          [2] "Aktive ordre"-tall
+          [3] "Varer å plukke"-tall
+        Grid-gapet (1px) fungerer som en "editorial" vertikal linje mellom cellene.
+      -->
       <section class="section hero-section">
         <div class="grid-b grid-hero">
+          <!-- Tittel-celle (venstre) -->
           <div class="cell cell-bg hero-left">
             <p class="tag">Ordredashboard</p>
             <h1 class="hero-heading">Aktive ordrer</h1>
             <p class="hero-sub">Live oversikt fra Packiyo og ShipHero</p>
           </div>
+          <!-- Stat 1: antall aktive (plukkbare) ordre -->
           <div class="cell cell-bg hero-stat">
             <span class="hero-stat-value font-number" id="stat-active">--</span>
             <span class="hero-stat-label">aktive ordre</span>
           </div>
+          <!-- Stat 2: totalt antall varer som må plukkes -->
           <div class="cell cell-bg hero-stat">
             <span class="hero-stat-value font-number" id="stat-items">--</span>
             <span class="hero-stat-label">varer å plukke</span>
           </div>
         </div>
-        <!-- Stat bar below hero — 50/50 per-source split -->
+
+        <!-- ─── STAT-BAR UNDER HERO (ShipHero vs Packiyo split) ─── -->
+        <!--
+          2-kol 50/50 grid. Hver celle har ID "cell-sh" / "cell-pk" som
+          app.js kan legge .errored-klassen på når den kilden feiler.
+          no-top = ingen ekstra border mellom hero og stat-bar.
+        -->
         <div class="grid-b grid-stat-bar no-top">
+          <!-- ShipHero-celle -->
           <div class="cell cell-white stat-bar-cell" id="cell-sh">
             <span class="sbadge sbadge-sh">ShipHero</span>
             <span class="sval font-number" id="source-sh">--</span>
             <span class="slabel" id="slabel-sh">aktive ordrer</span>
           </div>
+          <!-- Packiyo-celle -->
           <div class="cell cell-white stat-bar-cell" id="cell-pk">
             <span class="sbadge sbadge-pk">Packiyo</span>
             <span class="sval font-number" id="source-pk">--</span>
@@ -68,7 +121,11 @@
         </div>
       </section>
 
-      <!-- Orders — clean table in bordered grid -->
+      <!-- ─── LIVE-LISTE (nederste del, ~30 ordre) ──────────────── -->
+      <!--
+        app.js tegner innholdet inn her ved å bytte ut innerHTML.
+        Initielt vises "Laster ordrer..." mens første henting pågår.
+      -->
       <section class="section orders-section">
         <div class="grid-b grid-orders">
           <div class="cell cell-bg orders-cell" id="orders-feed">
@@ -80,6 +137,7 @@
     </div>
   </main>
 
+  <!-- ─── FOOTER (mørk strip nederst) ─────────────────────────── -->
   <footer class="footer">
     <div class="wrap footer-bar">
       <div class="footer-left">
@@ -90,6 +148,7 @@
     </div>
   </footer>
 
+  <!-- JS-fila lastes med cache-busting (bump ?v=X ved hver deploy) -->
   <script src="/app.js?v=3"></script>
 </body>
 </html>
