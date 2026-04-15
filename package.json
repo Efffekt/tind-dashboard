@@ -2,6 +2,7 @@
   "name": "tind-dashboard",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "tsx watch dev-server.ts",
     "build": "tsc --noEmit"
