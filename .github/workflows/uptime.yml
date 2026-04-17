@@ -64,10 +64,15 @@ jobs:
             exit 1
           fi
 
+          # Strip any trailing slashes so "$DASHBOARD_URL/api/data" never turns
+          # into "https://host.com//api/data" (which Vercel 308-redirects).
+          DASHBOARD_URL="${DASHBOARD_URL%/}"
+
           echo "Pinging $DASHBOARD_URL/api/data"
 
-          # --max-time gives us a hard ceiling; --fail makes curl exit non-zero on 4xx/5xx
-          HTTP_CODE=$(curl -s -o /tmp/body.json -w "%{http_code}" --max-time 20 "$DASHBOARD_URL/api/data" || echo "000")
+          # -L follows redirects (belt and suspenders if anyone leaves a weird URL).
+          # --max-time gives a hard ceiling so we don't hang the whole job.
+          HTTP_CODE=$(curl -sL -o /tmp/body.json -w "%{http_code}" --max-time 20 "$DASHBOARD_URL/api/data" || echo "000")
 
           if [ "$HTTP_CODE" = "000" ]; then
             echo "::error title=Dashboard unreachable::curl failed to connect to $DASHBOARD_URL/api/data"
