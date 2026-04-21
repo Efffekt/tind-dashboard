@@ -22,6 +22,14 @@ export interface Order {
   totalItems: number;          // antall enheter som venter på å sendes (inkluderer backordered-delen)
   backorderedItems?: number;   // delmengden av totalItems som er på restordre
   trackingNumbers: string[];   // ev. sporings-numre fra etiketter (kan være tom)
+  // ShipHero: per-klient-arbeidsflyt-tekst ("Skinsecret B2B", "Skinsecret B2C",
+  // "Lager VM", "Mesanin"). Brukes som gruppe-nøkkel i dashboard-rollupen
+  // slik at Skinsecret B2B og B2C blir separate rader. Tomt/udefinert for Packiyo.
+  fulfillmentStatus?: string;
+  // Packiyo: shipping_method_name (f.eks. "Sweats-Bring-Express neste dag",
+  // "Posten Norge"). Brukes for å oppdage ekspress-ordre og fyre popup-varsel.
+  // Tomt/udefinert for ShipHero.
+  shippingMethod?: string;
 }
 
 /** Felles lagerbeholdnings-type. Brukes ikke i dashbordet foreløpig

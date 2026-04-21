@@ -291,6 +291,9 @@ export async function getOrders(): Promise<OrdersResult> {
       totalItems,
       backorderedItems,
       trackingNumbers,
+      // Shipping-metoden driver ekspress-deteksjonen ("Sweats-Bring-Express neste dag").
+      // Vi lagrer rå-navnet; alerts.ts gjør match på /express/i.
+      shippingMethod: (attrs.shipping_method_name as string | undefined) ?? undefined,
     };
   });
 
@@ -355,4 +358,62 @@ export async function getOrders(): Promise<OrdersResult> {
   const truncated = orderPageTruncated || schemaDrift;
 
   return { pickable, backordered, truncated };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// KPI: antall ordre sendt siden gitt tidspunkt
+// ─────────────────────────────────────────────────────────────────────────
+
+// Teller fulfilled Packiyo-ordre med fulfilled_at >= since. Packiyo støtter
+// IKKE dato-filter på API-et (verifisert via probing), så vi:
+//   1. Filtrerer på fulfilled=1
+//   2. Sorterer på -updated_at (nyeste først)
+//   3. Paginerer og sjekker fulfilled_at per ordre
+//   4. Stopper når alle ordrene på en side har updated_at < since
+//      (sort-rekkefølgen garanterer at alt videre også er eldre)
+//
+// MAX_PAGES = 10 gir oss opp til 1000 ordre å bla gjennom — mer enn nok
+// for en dagsvolum, men hindrer runaway hvis noe er galt med sorteringen.
+export async function getShippedSinceCount(since: string): Promise<number> {
+  const sinceMs = new Date(since).getTime();
+  if (!Number.isFinite(sinceMs)) return 0;
+
+  let count = 0;
+  const MAX_PAGES = 10;
+
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const response = await request<JsonApiResponse<JsonApiResource[]>>('/api/v1/orders', {
+      'filter[fulfilled]': '1',
+      sort: '-updated_at',
+      'page[size]': '100',
+      'page[number]': String(page),
+    });
+    const data = response.data;
+    if (data.length === 0) break;
+
+    let allOlder = true;
+    for (const o of data) {
+      const a = o.attributes ?? {};
+      const fulfilledAt = a.fulfilled_at as string | undefined;
+      const updatedAt = a.updated_at as string | undefined;
+      const fulfilledMs = fulfilledAt ? new Date(fulfilledAt).getTime() : NaN;
+      const updatedMs = updatedAt ? new Date(updatedAt).getTime() : NaN;
+
+      if (Number.isFinite(fulfilledMs) && fulfilledMs >= sinceMs) {
+        count++;
+      }
+      // Så snart vi ser en updated_at >= since, vet vi at denne siden KAN
+      // inneholde nyere fulfilled-ordre — vi kan ikke bryte ut ennå.
+      if (!Number.isFinite(updatedMs) || updatedMs >= sinceMs) {
+        allOlder = false;
+      }
+    }
+
+    // Hvis hele siden ligger før `since`, er alt videre garantert også eldre
+    // (sort=-updated_at). Stopp paginering.
+    if (allOlder) break;
+    if (data.length < 100) break;
+  }
+
+  return count;
 }

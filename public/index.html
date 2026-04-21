@@ -23,15 +23,16 @@
   <meta name="theme-color" content="#F5F5F3" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-  <!-- Font-lasting: Inter for brødtekst + Clash Display for tall/overskrifter -->
+  <!-- Font-lasting: Inter for brødtekst + Clash Display for tall/overskrifter
+       + Bebas Neue for logo-ordmerket (Tind sin brand-typografi, jf. guidelines). -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&family=Bebas+Neue&display=swap" rel="stylesheet" />
   <link href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap" rel="stylesheet" />
 
   <!-- ?v=3 = cache-busting: bump dette nummeret ved hver deploy
        slik at nettlesere på TV-ene laster ny CSS uten hard reload. -->
-  <link rel="stylesheet" href="/styles.css?v=3" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
 </head>
 <body>
   <!-- Sveits-inspirerte side-kanter (1px border-left/right på wrap) -->
@@ -73,10 +74,11 @@
 
       <!-- ─── HERO-SEKSJONEN (øverste store blokka) ──────────────── -->
       <!--
-        3-kolonners grid med like store celler:
+        4-kolonners grid med like store celler:
           [1] Tittel-celle: Ordredashboard-merkelapp + overskrift + undertekst
           [2] "Aktive ordre"-tall
           [3] "Varer å plukke"-tall
+          [4] "Sendt i dag"-tall
         Grid-gapet (1px) fungerer som en "editorial" vertikal linje mellom cellene.
       -->
       <section class="section hero-section">
@@ -96,6 +98,11 @@
           <div class="cell cell-bg hero-stat">
             <span class="hero-stat-value font-number" id="stat-items">--</span>
             <span class="hero-stat-label">varer å plukke</span>
+          </div>
+          <!-- Stat 3: ordre sendt i dag (fra midnatt Oslo-tid) -->
+          <div class="cell cell-bg hero-stat">
+            <span class="hero-stat-value font-number" id="stat-shipped">--</span>
+            <span class="hero-stat-label">sendt i dag</span>
           </div>
         </div>
 
@@ -121,15 +128,16 @@
         </div>
       </section>
 
-      <!-- ─── LIVE-LISTE (nederste del, ~30 ordre) ──────────────── -->
+      <!-- ─── KLIENT-ROLLUP (nederste del — én rad per butikk) ── -->
       <!--
         app.js tegner innholdet inn her ved å bytte ut innerHTML.
-        Initielt vises "Laster ordrer..." mens første henting pågår.
+        Én rad per butikk/workflow, sortert med flest aktive ordre øverst.
+        Initielt vises "Laster..." mens første henting pågår.
       -->
       <section class="section orders-section">
         <div class="grid-b grid-orders">
           <div class="cell cell-bg orders-cell" id="orders-feed">
-            <div class="feed-empty">Laster ordrer...</div>
+            <div class="feed-empty">Laster...</div>
           </div>
         </div>
       </section>
@@ -137,18 +145,29 @@
     </div>
   </main>
 
-  <!-- ─── FOOTER (mørk strip nederst) ─────────────────────────── -->
-  <footer class="footer">
-    <div class="wrap footer-bar">
-      <div class="footer-left">
-        <img src="/logos/tind-mark-white.svg" alt="" width="24" height="31" />
-        <span>Tind Logistics AS</span>
+  <!-- ─── POPUP-OVERLAY (popup-varsel for ekspress/B2B-ordre) ────── -->
+  <!--
+    Skjult som default. app.js viser den når en ny alert-ID dukker opp
+    i /api/data. Full-screen takeover så det er umulig å overse på TV-en.
+    Auto-dismisses etter 12 sekunder, eller ved klikk.
+  -->
+  <div id="alert-overlay" class="alert-overlay" style="display:none" role="alert">
+    <div class="alert-card" id="alert-card">
+      <div class="alert-kicker" id="alert-kicker">NY ORDRE</div>
+      <div class="alert-title" id="alert-title">—</div>
+      <div class="alert-meta">
+        <span class="alert-meta-label">Ordre</span>
+        <span class="alert-meta-value" id="alert-order">—</span>
       </div>
-      <span class="footer-right">Org.nr: 930 826 278 · +47 412 74 141</span>
+      <div class="alert-meta">
+        <span class="alert-meta-label">Butikk</span>
+        <span class="alert-meta-value" id="alert-store">—</span>
+      </div>
+      <div class="alert-hint">Trykk for å lukke</div>
     </div>
-  </footer>
+  </div>
 
   <!-- JS-fila lastes med cache-busting (bump ?v=X ved hver deploy) -->
-  <script src="/app.js?v=3"></script>
+  <script src="/app.js?v=4"></script>
 </body>
 </html>

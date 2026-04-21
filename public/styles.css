@@ -16,6 +16,9 @@
   --pill: 9999px;
   --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
+  /* Bebas Neue er brand-typografien ifølge Tind sine guidelines. Brukes
+     for logo-ordmerket ("Tind Logistics") i header, footer og login. */
+  --logo: "Bebas Neue", "Clash Display", ui-sans-serif, system-ui, sans-serif;
   --w: 1920px;
 }
 
@@ -51,8 +54,11 @@ body {
 }
 .logo {
   display: flex; align-items: center; gap: 14px; text-decoration: none;
-  font-family: var(--display); font-size: 1.6rem; font-weight: 600;
-  color: var(--heading); letter-spacing: -0.02em;
+  font-family: var(--logo); font-size: 1.9rem; font-weight: 400;
+  color: var(--heading); letter-spacing: 0.04em;
+  /* Bebas Neue er all-caps i seg selv; text-transform sikrer at fallback-
+     fontene også rendrer som caps i brand-stil. */
+  text-transform: uppercase;
 }
 .logo img { height: 36px; width: auto; }
 .nav-right { display: flex; align-items: center; gap: 16px; }
@@ -86,9 +92,10 @@ body {
 .cell-white { background: var(--white); }
 
 /* ── Hero ── */
-.grid-hero { grid-template-columns: 1fr 1fr 1fr; }
+/* 4 like kolonner: tittel-celle + 3 KPI-tall (aktive, varer, sendt i dag). */
+.grid-hero { grid-template-columns: 1fr 1fr 1fr 1fr; }
 
-.hero-left { padding: 56px 56px; display: flex; flex-direction: column; justify-content: center; }
+.hero-left { padding: 16px 56px; display: flex; flex-direction: column; justify-content: center; }
 
 .tag {
   font-size: 16px; font-weight: 550; text-transform: uppercase;
@@ -102,7 +109,7 @@ body {
 
 .hero-stat {
   display: flex; flex-direction: column; align-items: flex-start;
-  justify-content: center; text-align: left; padding: 56px 56px;
+  justify-content: center; text-align: left; padding: 16px 56px;
 }
 .hero-stat-value { font-size: clamp(96px, 9vw, 144px); font-weight: 650; color: var(--heading); line-height: 0.95; }
 .hero-stat-label { margin-top: 16px; font-size: 22px; font-weight: 450; color: var(--muted); }
@@ -160,11 +167,38 @@ body {
 }
 .order-row.stale .order-time { color: #C74432; font-weight: 600; }
 
+/* Urgent-rader: persistent markering for grupper med aktive ekspress/B2B-ordre.
+   Synlig fra andre siden av rommet — bred venstrekant + rosé bakgrunnstint.
+   Urgent + stale sameksisterer; urgent har forrang og vinner venstrekant-fargen. */
+.order-row.urgent::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 8px;
+}
+.order-row.urgent-express { background: #FDECEA; }
+.order-row.urgent-express::before { background: #C4442E; }
+.order-row.urgent-b2b { background: #FFF8DC; }
+.order-row.urgent-b2b::before { background: #856404; }
+
+/* Liten pill etter butikknavnet som sier "1 ekspress" eller "3 B2B". */
+.urgent-badge {
+  display: inline-block;
+  margin-left: 12px; padding: 3px 10px;
+  border-radius: var(--pill);
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  vertical-align: middle;
+}
+.urgent-express .urgent-badge { background: #C4442E; color: #fff; }
+.urgent-b2b .urgent-badge { background: #856404; color: #fff; }
+
 .order-id { display: flex; align-items: center; gap: 12px; }
 .order-num { font-size: 22px; font-weight: 550; color: var(--heading); font-family: var(--display); }
 .order-customer { font-size: 20px; font-weight: 450; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .order-qty { font-size: 22px; font-weight: 650; color: var(--heading); text-align: right; font-family: var(--display); }
 .order-time { font-size: 18px; font-weight: 500; color: var(--muted); text-align: right; font-family: var(--display); }
+/* Antall plukkbare varer per butikk-gruppe — dempet versus det store ordre-tallet,
+   men fortsatt lesbart på avstand. */
+.group-items { font-size: 18px; font-weight: 500; color: var(--muted); text-align: right; font-family: var(--display); }
 
 .stag {
   display: inline-flex; padding: 4px 10px; border-radius: var(--pill);
@@ -197,19 +231,77 @@ body {
   padding: 8px; font-size: 14px; font-weight: 550;
 }
 
-/* ── Footer ── */
-.footer { flex-shrink: 0; background: var(--dark); }
-.footer-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  height: 64px; border-top: 1px solid rgba(255,255,255,0.1);
+/* ── Alert overlay (popup for ekspress / B2B-ordre) ── */
+.alert-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(17, 17, 17, 0.72);
+  backdrop-filter: blur(4px);
+  animation: alertFadeIn 180ms ease-out;
+  cursor: pointer;
 }
-.footer-left {
-  display: flex; align-items: center; gap: 12px;
-  font-family: var(--display); font-size: 16px; font-weight: 600;
-  color: var(--white); letter-spacing: -0.02em;
+.alert-card {
+  background: var(--white);
+  border: 3px solid var(--heading);
+  padding: 64px 88px;
+  min-width: 640px; max-width: 80vw;
+  text-align: center;
+  box-shadow: 0 40px 80px rgba(0,0,0,0.35);
+  animation: alertPop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.footer-left img { height: 26px; width: auto; }
-.footer-right { font-size: 13px; color: rgba(255,255,255,0.5); }
+/* Varianter: type-specifikk farge på ramme + kicker */
+.alert-card.type-express { border-color: #C4442E; }
+.alert-card.type-express .alert-kicker { background: #C4442E; color: #fff; }
+.alert-card.type-b2b { border-color: #856404; }
+.alert-card.type-b2b .alert-kicker { background: #FFF3CD; color: #856404; }
+
+.alert-kicker {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 8px 20px;
+  background: var(--heading); color: #fff;
+  margin-bottom: 32px;
+}
+.alert-title {
+  font-family: var(--display);
+  font-size: 4rem; font-weight: 600;
+  color: var(--heading);
+  letter-spacing: -0.03em; line-height: 1.05;
+  margin-bottom: 40px;
+}
+.alert-meta {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  font-size: 1.2rem;
+}
+.alert-meta:last-of-type { border-bottom: 1px solid var(--border); }
+.alert-meta-label {
+  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.8rem;
+}
+.alert-meta-value {
+  font-family: var(--display); font-weight: 600;
+  color: var(--heading);
+}
+.alert-hint {
+  margin-top: 32px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+
+@keyframes alertFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes alertPop {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
 
 /* ── Responsive ── */
 @media (max-width: 1024px) {

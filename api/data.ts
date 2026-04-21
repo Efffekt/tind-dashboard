@@ -13,15 +13,14 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { buildGroups } from '../src/groups.js';
+import { buildAlerts } from '../src/alerts.js';
+import { osloMidnightIso } from '../src/time.js';
 
 // Hvis ingen API-tokens finnes i miljøet, faller vi tilbake til mock-data.
 // Det gjør at dashbordet fortsatt kan vises i preview/dev uten at alt kræsjer.
 // I produksjon SKAL begge tokens være satt i Vercel env vars.
 const useMock = !process.env.SHIPHERO_ACCESS_TOKEN && !process.env.PACKIYO_TOKEN;
-
-// Maks antall ordre vi viser i live-listen nederst på skjermen.
-// Delt 15/15 mellom ShipHero og Packiyo, med backfill hvis en side er tom.
-const DISPLAY_LIMIT = 30;
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   // Cache-headeren synkroniserer med vercel.json-cronen (som kjører hvert
@@ -43,6 +42,11 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
 
     let shResult: ServiceResult;
     let pkResult: ServiceResult;
+    let shShippedToday = 0;
+    let pkShippedToday = 0;
+
+    // Midnatt i dag i Oslo-tid — grensen for "sendt i dag"-KPI.
+    const sinceIso = osloMidnightIso();
 
     if (useMock) {
       // MOCK-MODUS: bruker test-data. Frontend viser gult "Viser testdata"-banner.
@@ -52,21 +56,41 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       const pkOrders = mockOrders.filter(o => o.source === 'packiyo');
       shResult = { pickable: shOrders, backordered: [], truncated: false };
       pkResult = { pickable: pkOrders, backordered: [], truncated: false };
+      // For mock: tell ordre som er "sendt" (fulfilled/shipped/delivered) —
+      // gir realistisk tall i "sendt i dag"-KPI under utvikling.
+      const isShipped = (s: string) => ['fulfilled', 'shipped', 'delivered'].includes(s);
+      shShippedToday = shOrders.filter(o => isShipped(o.status)).length;
+      pkShippedToday = pkOrders.filter(o => isShipped(o.status)).length;
     } else {
-      // EKTE-MODUS: kall begge API-ene parallelt for hastighet.
-      // Hver .catch sørger for at én kilde kan feile uten å ta ned den andre.
-      // Feilen lagres i result.error og propageres til frontend som rødt varsel.
+      // EKTE-MODUS: kall begge API-ene parallelt for hastighet — og legg
+      // "sendt-i-dag"-KPI-ene inn i samme Promise.all så alt går i parallell.
+      // Per-kall .catch sørger for at én feil ikke tar ned de andre.
       const shiphero = await import('../src/services/shiphero.js');
       const packiyo = await import('../src/services/packiyo.js');
 
-      [shResult, pkResult] = await Promise.all([
+      const [shRes, pkRes, shShipped, pkShipped] = await Promise.all([
         shiphero.getOrders().catch((err: Error) => ({
           pickable: [], backordered: [], truncated: false, error: err.message,
         })),
         packiyo.getOrders().catch((err: Error) => ({
           pickable: [], backordered: [], truncated: false, error: err.message,
         })),
+        // KPI-ene er "best effort" — hvis de feiler, returnerer vi 0 i stedet
+        // for å ta ned hele responsen. En feil her bubblet IKKE opp som
+        // per-kilde-feil i UI — det er en separat KPI.
+        shiphero.getShippedSinceCount(sinceIso).catch((err: Error) => {
+          console.warn('ShipHero getShippedSinceCount error:', err.message);
+          return 0;
+        }),
+        packiyo.getShippedSinceCount(sinceIso).catch((err: Error) => {
+          console.warn('Packiyo getShippedSinceCount error:', err.message);
+          return 0;
+        }),
       ]);
+      shResult = shRes;
+      pkResult = pkRes;
+      shShippedToday = shShipped;
+      pkShippedToday = pkShipped;
     }
 
     // Pakk ut for enklere bruk videre.
@@ -75,29 +99,19 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     const shBackordered = shResult.backordered;
     const pkBackordered = pkResult.backordered;
 
-    // ─── Bygg display-listen (live feeden nederst) ───────────────────────
+    // ─── Bygg klient-/workflow-rollupen (live-seksjonen nederst) ────────
     //
-    // Strategi: myk balansering. Vi tar de 15 nyeste fra hver kilde, men
-    // hvis én side har færre enn 15 lar vi den andre fylle opp de tomme
-    // plassene. Slik ser du alltid nyeste aktivitet fra begge systemer,
-    // men hvis én er helt tom får den andre hele listen.
-    const sortByCreated = (a: any, b: any) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    const halfSlot = Math.ceil(DISPLAY_LIMIT / 2); // 15 per kilde som mål
+    // I stedet for å vise en liste av de 30 nyeste ordrene viser TV-en en
+    // oversikt per butikk/workflow ("Skinsecret B2C — 58 ordre"). Det er
+    // lettere å lese på avstand og gir operatørene en umiddelbar prioritet.
+    // Gruppe-logikken ligger i src/groups.ts (delt med dev-server).
+    const groups = buildGroups([...shPickable, ...pkPickable]);
 
-    const shSorted = shPickable.slice().sort(sortByCreated);
-    const pkSorted = pkPickable.slice().sort(sortByCreated);
-
-    // Ta opp til 15 ShipHero, og fyll opp med Packiyo til DISPLAY_LIMIT totalt.
-    const shTake = Math.min(shSorted.length, halfSlot);
-    const pkTake = Math.min(pkSorted.length, DISPLAY_LIMIT - shTake);
-    // Hvis Packiyo hadde få (under 15), gi ShipHero muligheten til å fylle opp.
-    const shTakeFinal = Math.min(shSorted.length, DISPLAY_LIMIT - pkTake);
-
-    const orders = [
-      ...shSorted.slice(0, shTakeFinal),
-      ...pkSorted.slice(0, pkTake),
-    ].sort(sortByCreated); // Slå dem sammen og sorter på nytt så nyeste kommer øverst.
+    // ─── Alerts (popup-triggers for TV-en) ─────────────────────────────
+    // Serveren sender ALLE aktive ordre som kvalifiserer for en popup hver
+    // gang. Frontend holder selv orden på hvilke IDs som allerede er vist
+    // (via localStorage) slik at samme ordre ikke fyrer flere popups.
+    const alerts = buildAlerts([...shPickable, ...pkPickable]);
 
     // ─── Beregn "varer å plukke" ─────────────────────────────────────────
     //
@@ -114,6 +128,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       activeOrders: shPickable.length + pkPickable.length, // Total antall plukkbare ordre
       backorderedOrders: shBackordered.length + pkBackordered.length, // (skjult i UI nå)
       totalItems: pickableUnits, // "varer å plukke"-tallet
+      shippedToday: shShippedToday + pkShippedToday, // "sendt i dag"-KPI (begge kilder summert)
       ordersBySource: {
         shiphero: shPickable.length,
         packiyo: pkPickable.length,
@@ -123,7 +138,8 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     // ─── Returner JSON-svaret ────────────────────────────────────────────
     return res.json({
       stats,
-      orders, // Live-listen med 30 ordre
+      groups, // Rollup per butikk/workflow (rendres som rader i live-seksjonen)
+      alerts, // Popup-triggers: ekspress-ordre + Skinsecret B2B
       truncated: shResult.truncated || pkResult.truncated, // Trigger rødt banner hvis data er ufullstendig
       errors: {
         shiphero: shResult.error ?? null,

@@ -33,17 +33,28 @@ let refreshInFlight: Promise<string> | null = null;
 // det dukker opp flere test-/demo-butikker.
 const IGNORED_SHOP_SLUGS = new Set(['xserc9-vd']);
 
+// Overstyring for butikker der shop_name er anonymisert/meningsløst
+// (f.eks. genererte myshopify-subdomener som "7e7f33"). Nøkkelen matches
+// mot resultatet av cleanShopName() FØR formatering — verdien er klientens
+// faktiske navn. Utvid denne hvis flere slike butikker dukker opp.
+const SHOP_NAME_OVERRIDES: Record<string, string> = {
+  '7e7f33': 'Mesanin',
+};
+
 // Gjør om et rått shop_name ("lampefokus.myshopify.com") til et pent visningsnavn
 // ("Lampefokus"). Fjerner .myshopify.com-endelsen, bytter bindestrek/understrek
-// til mellomrom, og gjør hvert ord til Stor Forbokstav.
+// til mellomrom, og gjør hvert ord til Stor Forbokstav. Overstyringer kjøres
+// først slik at anonymiserte shop-handles kan mappes til klient-navn.
 function cleanShopName(raw: string | null | undefined): string {
   if (!raw) return 'Ukjent';
   const cleaned = raw
     .replace(/\.myshopify\.com$/i, '')
     .replace(/\.shopify\.com$/i, '')
-    .replace(/[-_]/g, ' ')
-    .trim();
+    .toLowerCase();
+  if (SHOP_NAME_OVERRIDES[cleaned]) return SHOP_NAME_OVERRIDES[cleaned];
   return cleaned
+    .replace(/[-_]/g, ' ')
+    .trim()
     .split(' ')
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
@@ -224,6 +235,10 @@ function toOrder(node: OrderNode): Order {
     totalItems,
     backorderedItems,
     trackingNumbers,
+    // Rå per-klient-tekst fra ShipHero ("Skinsecret B2B", "Lager VM", osv.).
+    // Dashbord-rollupen bruker denne som gruppe-nøkkel slik at B2B/B2C
+    // splittes selv når shop_name er felles ("Skinsecret").
+    fulfillmentStatus: node.fulfillment_status ?? undefined,
   };
 }
 
@@ -267,38 +282,59 @@ export async function getOrders(): Promise<OrdersResult> {
   type OrdersShape = {
     orders: {
       data: {
-        pageInfo: { hasNextPage: boolean };
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
         edges: { node: OrderNode }[];
       };
     };
   };
 
-  // STEG 1: Hent alle ordre som er klare for plukking.
+  // STEG 1: Hent alle ordre som er klare for plukking — cursor-paginert.
+  //
   // Bruker ready_to_ship: true fordi dette er ShipHero sin offisielle "kan plukkes"-flagg,
   // og den fanger opp ordre på tvers av alle de 9 klientenes custom-statuser.
-  const res = await query<OrdersShape>(
-    `query GetPickableOrders {
-      orders(ready_to_ship: true) {
-        data {
-          pageInfo { hasNextPage }
-          edges { node { ${ORDER_FIELDS} } }
-        }
-      }
-    }`
-  );
+  //
+  // ShipHero returnerer maks 100 ordre per side. Ved >100 aktive ordre (vanlig
+  // under topp-sesong) mister vi alt utenfor første side hvis vi ikke paginerer —
+  // det ble oppdaget i produksjon da operatørene rapporterte manglende ordre.
+  // Derfor paginerer vi med endCursor til hasNextPage=false eller vi treffer taket.
+  const allEdges: { node: OrderNode }[] = [];
+  let after: string | null = null;
+  let pages = 0;
+  let paginationCapped = false;
+  const MAX_PAGES = 20; // 20 × 100 = 2000 aktive ordre — sikkerhetstak
 
-  // ShipHero har en hard grense på 100 ordre per query uten cursor-støtte.
-  // Hvis vi når den grensen, noterer vi det og fyrer banner i UI.
-  const hasNextPage = !!res.orders.data.pageInfo?.hasNextPage;
-  if (hasNextPage) {
-    console.warn(
-      `ShipHero: ready_to_ship query hit the 100-edge page cap — some pickable orders are not counted`
+  while (pages < MAX_PAGES) {
+    pages++;
+    const res: OrdersShape = await query<OrdersShape>(
+      `query GetPickableOrders($after: String) {
+        orders(ready_to_ship: true) {
+          data(first: 100, after: $after) {
+            pageInfo { hasNextPage endCursor }
+            edges { node { ${ORDER_FIELDS} } }
+          }
+        }
+      }`,
+      { after }
     );
+
+    allEdges.push(...res.orders.data.edges);
+    if (!res.orders.data.pageInfo?.hasNextPage) break;
+    after = res.orders.data.pageInfo.endCursor;
+    if (!after) break;
+  }
+
+  if (pages >= MAX_PAGES) {
+    // Safety-tak truffet — fyrer truncated-flagg og rødt banner i UI slik
+    // at vi aldri stille viser for få ordre.
+    console.warn(
+      `ShipHero: ready_to_ship pagination hit MAX_PAGES (${MAX_PAGES}); count may be low`
+    );
+    paginationCapped = true;
   }
 
   // STEG 2: Filtrer bort test-butikker og map til interne Order-objekter.
   const isAllowed = (n: OrderNode) => !IGNORED_SHOP_SLUGS.has(shopSlug(n.shop_name));
-  const filteredNodes = res.orders.data.edges.map(e => e.node).filter(isAllowed);
+  const filteredNodes = allEdges.map(e => e.node).filter(isAllowed);
   const pickable = filteredNodes.map(toOrder);
 
   // STEG 3: Fiks ordre med mer enn 25 linjer.
@@ -436,6 +472,66 @@ export async function getOrders(): Promise<OrdersResult> {
 
   // STEG 4: Returner resultatet til kalleren.
   // truncated-flagget bubbles opp til api/data.ts → frontend → rødt banner.
-  const truncated = hasNextPage || stillTruncated;
+  const truncated = paginationCapped || stillTruncated;
   return { pickable, backordered: [], truncated };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// KPI: antall ordre sendt i dag
+// ─────────────────────────────────────────────────────────────────────────
+
+// Teller ordre som er fulfilled (= sendt hos ShipHero) og oppdatert siden
+// `since`. ShipHero har ingen total_count på OrderConnection, så vi må
+// paginere med cursor og summere. 100 ordre per side — vi paginerer inntil
+// hasNextPage=false eller vi treffer MAX_PAGES-taket.
+//
+// MERK: `updated_from` er ikke nøyaktig det samme som "sendt fra og med",
+// men for en KPI på TV-en er dette nær nok. En ordre som ble sendt tidligere
+// og oppdatert i dag (f.eks. ny tracking-info) vil telles med — men det er
+// et lite avvik som ikke endrer KPI-ens nytte.
+export async function getShippedSinceCount(since: string): Promise<number> {
+  type ShippedPage = {
+    orders: {
+      data: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        edges: { node: { id: string; shop_name: string | null } }[];
+      };
+    };
+  };
+
+  let count = 0;
+  let after: string | null = null;
+  let pages = 0;
+  const MAX_PAGES = 30; // 30 × 100 = 3000 ordre — mer enn nok for én dag
+
+  while (pages < MAX_PAGES) {
+    pages++;
+    const res: ShippedPage = await query<ShippedPage>(
+      `query GetShippedOrders($since: ISODateTime!, $after: String) {
+        orders(updated_from: $since, fulfillment_status: "fulfilled") {
+          data(first: 100, after: $after) {
+            pageInfo { hasNextPage endCursor }
+            edges { node { id shop_name } }
+          }
+        }
+      }`,
+      { since, after }
+    );
+
+    const edges = res.orders.data.edges;
+    // Filtrer ut test-/demo-butikker slik at KPI-en matcher det vi viser ellers.
+    for (const e of edges) {
+      if (!IGNORED_SHOP_SLUGS.has(shopSlug(e.node.shop_name))) count++;
+    }
+
+    if (!res.orders.data.pageInfo?.hasNextPage) break;
+    after = res.orders.data.pageInfo.endCursor;
+    if (!after) break;
+  }
+
+  if (pages >= MAX_PAGES) {
+    console.warn(`ShipHero: getShippedSinceCount hit MAX_PAGES (${MAX_PAGES}); count may be low`);
+  }
+
+  return count;
 }

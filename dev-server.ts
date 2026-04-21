@@ -18,6 +18,17 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  COOKIE_NAME,
+  buildClearCookieHeader,
+  buildSetCookieHeader,
+  createSessionCookieValue,
+  parseCookie,
+  verifySessionCookieValue,
+} from './src/auth.js';
+import { buildGroups } from './src/groups.js';
+import { buildAlerts } from './src/alerts.js';
+import { osloMidnightIso } from './src/time.js';
 
 // ESM-aktig __dirname — Node gir ikke dette ut av boksen for import.meta.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -54,9 +65,6 @@ const MIME: Record<string, string> = {
   '.png': 'image/png',
 };
 
-// Samme konstant som i api/data.ts — maks ordre i live-listen.
-const DISPLAY_LIMIT = 30;
-
 // Form-definisjon for hva hver tjeneste returnerer.
 type ServiceResult = {
   pickable: any[];
@@ -77,6 +85,11 @@ async function handleApi(res: http.ServerResponse) {
   try {
     let shResult: ServiceResult;
     let pkResult: ServiceResult;
+    let shShippedToday = 0;
+    let pkShippedToday = 0;
+
+    // Midnatt i dag i Oslo-tid — grensen for "sendt i dag"-KPI.
+    const sinceIso = osloMidnightIso();
 
     if (useMock) {
       // MOCK-MODUS
@@ -86,12 +99,15 @@ async function handleApi(res: http.ServerResponse) {
       const pkOrders = mockOrders.filter(o => o.source === 'packiyo');
       shResult = { pickable: shOrders, backordered: [], truncated: false };
       pkResult = { pickable: pkOrders, backordered: [], truncated: false };
+      const isShipped = (s: string) => ['fulfilled', 'shipped', 'delivered'].includes(s);
+      shShippedToday = shOrders.filter(o => isShipped(o.status)).length;
+      pkShippedToday = pkOrders.filter(o => isShipped(o.status)).length;
     } else {
-      // EKTE-MODUS: kall begge API-ene parallelt.
+      // EKTE-MODUS: kall begge API-ene parallelt — inkl. "sendt i dag"-KPI-ene.
       const shiphero = await import('./src/services/shiphero.js');
       const packiyo = await import('./src/services/packiyo.js');
 
-      [shResult, pkResult] = await Promise.all([
+      const [shRes, pkRes, shShipped, pkShipped] = await Promise.all([
         // Per-kilde .catch: feil i én kilde tar IKKE ned den andre.
         // Feilmeldingen lagres og sendes til frontend som rødt varsel.
         shiphero.getOrders().catch((err: Error) => {
@@ -102,7 +118,20 @@ async function handleApi(res: http.ServerResponse) {
           console.error('Packiyo error:', err.message);
           return { pickable: [], backordered: [], truncated: false, error: err.message };
         }),
+        // KPI-feil skal ikke ta ned responsen — returner 0 ved feil.
+        shiphero.getShippedSinceCount(sinceIso).catch((err: Error) => {
+          console.warn('ShipHero getShippedSinceCount error:', err.message);
+          return 0;
+        }),
+        packiyo.getShippedSinceCount(sinceIso).catch((err: Error) => {
+          console.warn('Packiyo getShippedSinceCount error:', err.message);
+          return 0;
+        }),
       ]);
+      shResult = shRes;
+      pkResult = pkRes;
+      shShippedToday = shShipped;
+      pkShippedToday = pkShipped;
     }
 
     // Pakk ut for lesbarhet.
@@ -111,22 +140,10 @@ async function handleApi(res: http.ServerResponse) {
     const shBackordered = shResult.backordered;
     const pkBackordered = pkResult.backordered;
 
-    // ─── Myk-balansert display-liste (15 per kilde, med backfill) ────────
-    // Samme logikk som i api/data.ts. Vi kopierer den her i stedet for å
-    // hente ut til en delt fil, fordi dev-server er en tynn wrapper og
-    // duplisering er enklere enn å introdusere et nytt abstraksjonslag.
-    const sortByCreated = (a: any, b: any) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    const halfSlot = Math.ceil(DISPLAY_LIMIT / 2);
-    const shSorted = shPickable.slice().sort(sortByCreated);
-    const pkSorted = pkPickable.slice().sort(sortByCreated);
-    const shTake = Math.min(shSorted.length, halfSlot);
-    const pkTake = Math.min(pkSorted.length, DISPLAY_LIMIT - shTake);
-    const shTakeFinal = Math.min(shSorted.length, DISPLAY_LIMIT - pkTake);
-    const orders = [
-      ...shSorted.slice(0, shTakeFinal),
-      ...pkSorted.slice(0, pkTake),
-    ].sort(sortByCreated);
+    // ─── Klient-/workflow-rollup (delt med api/data.ts via src/groups.ts) ──
+    const groups = buildGroups([...shPickable, ...pkPickable]);
+    // Popup-alerts (ekspress + Skinsecret B2B). Klienten deduper selv.
+    const alerts = buildAlerts([...shPickable, ...pkPickable]);
 
     // Varer å plukke = summen av (totalItems - backorderedItems) per ordre.
     // Trekker fra restordre-delen siden den ikke kan plukkes nå.
@@ -141,12 +158,14 @@ async function handleApi(res: http.ServerResponse) {
         activeOrders: shPickable.length + pkPickable.length,
         backorderedOrders: shBackordered.length + pkBackordered.length,
         totalItems: pickableUnits,
+        shippedToday: shShippedToday + pkShippedToday,
         ordersBySource: {
           shiphero: shPickable.length,
           packiyo: pkPickable.length,
         },
       },
-      orders,
+      groups,
+      alerts,
       truncated: shResult.truncated || pkResult.truncated,
       errors: {
         shiphero: shResult.error ?? null,
@@ -167,20 +186,129 @@ async function handleApi(res: http.ServerResponse) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// HTTP-server: ruter /api/data til handleApi, alt annet som statiske filer
+// /api/auth-handler (speil av api/auth.ts for lokalt bruk)
+// Sett DASHBOARD_PIN og SESSION_SECRET i .env for å aktivere.
+// ─────────────────────────────────────────────────────────────────────────
+
+async function readJsonBody(req: http.IncomingMessage): Promise<any> {
+  return new Promise((resolve) => {
+    let data = '';
+    req.on('data', (chunk) => { data += chunk; });
+    req.on('end', () => {
+      try { resolve(data ? JSON.parse(data) : {}); } catch { resolve({}); }
+    });
+    req.on('error', () => resolve({}));
+  });
+}
+
+async function handleAuth(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
+  if (req.method !== 'POST') {
+    res.writeHead(405, { 'Allow': 'POST' });
+    return res.end();
+  }
+
+  // Utlogging.
+  if (url.searchParams.get('logout')) {
+    // Lokalt kjører vi over HTTP, så secure: false.
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Set-Cookie': buildClearCookieHeader({ secure: false }),
+    });
+    return res.end(JSON.stringify({ ok: true }));
+  }
+
+  const expectedPin = process.env.DASHBOARD_PIN || '';
+  const secret = process.env.SESSION_SECRET || '';
+  if (!expectedPin || !secret) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Server not configured (missing DASHBOARD_PIN or SESSION_SECRET)' }));
+  }
+
+  const body = await readJsonBody(req);
+  const pin = typeof body?.pin === 'string' ? body.pin : '';
+  if (pin !== expectedPin) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Invalid PIN' }));
+  }
+
+  const cookieValue = await createSessionCookieValue(secret);
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Set-Cookie': buildSetCookieHeader(cookieValue, { secure: false }),
+  });
+  return res.end(JSON.stringify({ ok: true }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Gate-logikk: speiler middleware.ts for lokal utvikling.
+// Returnerer true hvis requesten ble håndtert (redirect/401) og videre
+// prosessering skal stoppe.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Stier som slipper forbi PIN-gaten uten autentisering.
+// MÅ matche middleware.ts-unntakene for å unngå divergens mellom dev og prod.
+function isPublicPath(pathname: string): boolean {
+  if (pathname === '/login' || pathname === '/login.html') return true;
+  if (pathname === '/api/auth') return true;
+  if (pathname === '/favicon.svg') return true;
+  if (pathname.startsWith('/logos/')) return true;
+  return false;
+}
+
+async function isAuthed(req: http.IncomingMessage): Promise<boolean> {
+  const secret = process.env.SESSION_SECRET || '';
+  if (!secret) return false;
+  const cookieValue = parseCookie(req.headers.cookie, COOKIE_NAME);
+  return verifySessionCookieValue(cookieValue, secret);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// HTTP-server: ruter /api/data, /api/auth, og server statiske filer.
+// Alt bak PIN-gaten med mindre stien er i isPublicPath().
 // ─────────────────────────────────────────────────────────────────────────
 
 const server = http.createServer(async (req, res) => {
-  const url = req.url || '/';
+  const raw = req.url || '/';
+  // URL-parsing krever en base. Vi bryr oss bare om pathname + search lokalt.
+  const url = new URL(raw, 'http://localhost');
+  const pathname = url.pathname;
 
-  // API-ruten går til handleren over.
-  if (url === '/api/data') {
+  // /api/auth slipper gjennom uten autentisering (det er selve login-endepunktet).
+  if (pathname === '/api/auth') {
+    return handleAuth(req, res, url);
+  }
+
+  // Gate: alt som ikke er public krever gyldig cookie.
+  if (!isPublicPath(pathname)) {
+    const authed = await isAuthed(req);
+    if (!authed) {
+      // API-kall → 401 JSON så frontend kan reagere.
+      if (pathname.startsWith('/api/')) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Unauthorized' }));
+      }
+      // HTML/asset → redirect til /login med ?next=.
+      const next = pathname + url.search;
+      const loc = next !== '/' && next !== '/login'
+        ? `/login?next=${encodeURIComponent(next)}`
+        : '/login';
+      res.writeHead(307, { Location: loc });
+      return res.end();
+    }
+  }
+
+  // API-ruten går til handleren over (bak gaten).
+  if (pathname === '/api/data') {
     return handleApi(res);
   }
 
+  // /login → server login.html (uten å kreve at URL-en ender på .html)
+  const resolvedPath = pathname === '/' ? 'index.html'
+    : pathname === '/login' ? 'login.html'
+    : pathname.replace(/^\//, '');
+
   // Alt annet: server statiske filer fra public/-mappa.
-  // / → index.html (rotstien leverer hoved-dashbordet)
-  const filePath = path.join(PUBLIC, url === '/' ? 'index.html' : url);
+  const filePath = path.join(PUBLIC, resolvedPath);
   const ext = path.extname(filePath);
 
   try {

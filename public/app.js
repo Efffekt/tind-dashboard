@@ -11,30 +11,16 @@
 
 // ─── Hjelpere for rendering ─────────────────────────────────────────────
 
-// Bygger HTML-en for status-pillen ("Ventende", "Sendt" osv.) i live-listen.
-// Tar en rå status-streng og mapper den til norsk tekst + fargeklasse.
-function pill(status) {
-  // Sanitiser: bare små bokstaver og understrek, alt annet fjernes.
-  // Dette gjør at "Skinsecret B2B" blir "skinsecretbb" og faller gjennom
-  // til det generiske utfallet nedenfor.
-  const n = (status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
-  // Kart fra ShipHero/Packiyo-statuser til norske etiketter.
-  const map = {
-    pending: 'Ventende',
-    shipped: 'Sendt',
-    fulfilled: 'Fullfort',
-    delivered: 'Levert',
-    cancelled: 'Kansellert',
-    processing: 'Behandles',
-    open: 'Apen',
-    in_transit: 'Under transport',
-    intransit: 'Under transport',
-  };
-  return `<span class="pill pill-${n}">${map[n] || status || 'Ukjent'}</span>`;
+// Escaper innhold vi skriver inn i innerHTML. Butikknavn kommer fra eksterne
+// API-er og kan i teorien inneholde HTML-tegn — enkel defensiv rensing.
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Liten merking som viser om en ordre kommer fra ShipHero eller Packiyo.
-// Viser "SH" eller "PK" med fargekode — brukes først i hver rad i live-listen.
+// Liten merking som viser om en ordre-gruppe kommer fra ShipHero eller Packiyo.
+// Viser "SH" eller "PK" med fargekode — brukes først i hver rad.
 function stag(s) {
   return `<span class="stag ${s === 'shiphero' ? 'stag-sh' : 'stag-pk'}">${s === 'shiphero' ? 'SH' : 'PK'}</span>`;
 }
@@ -68,40 +54,55 @@ function fmtTime(d) {
 
 // ─── Stale-highlighting ─────────────────────────────────────────────────
 
-// Terskel: ordre som er eldre enn 48 timer får rød venstre-kant og rød tid.
-const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 timer i millisekunder
+// Terskel: gruppe med eldste ordre eldre enn 48 timer får rød venstre-kant
+// og rød tid. Surfacer butikker som har ordre som har ligget for lenge.
+const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 
-// Statuser som betyr "ikke aktiv lenger" — disse får IKKE stale-highlight
-// fordi en ferdigsendt ordre ikke er "stuck", den er ferdig.
-const INACTIVE_STATUSES = new Set(['fulfilled', 'cancelled', 'canceled', 'delivered', 'shipped']);
+// ─── Tegn klient-/workflow-rollupen ────────────────────────────────────
+//
+// En rad per butikk/workflow: kilde-tag, navn, antall ordre, antall varer,
+// og eldste alder. Sortert med flest ordre øverst (gjøres av server).
 
-// ─── Tegn live-listen (30 ordre) ────────────────────────────────────────
-
-function renderOrders(orders) {
+function renderGroups(groups) {
   const el = document.getElementById('orders-feed');
-  // Tom liste → vis "Ingen ordrer"-melding.
-  if (!orders.length) {
-    el.innerHTML = '<div class="feed-empty">Ingen ordrer</div>';
+  if (!groups.length) {
+    el.innerHTML = '<div class="feed-empty">Ingen aktive ordrer</div>';
     return;
   }
 
   const now = Date.now();
 
-  // Tabellhodet med norske kolonnenavn.
-  const head = `<div class="orders-head"><span>Ordre</span><span>Klient</span><span style="text-align:right">Antall</span><span>Status</span><span style="text-align:right">Tid</span></div>`;
+  const head = `<div class="orders-head">
+    <span>Kilde</span>
+    <span>Butikk</span>
+    <span style="text-align:right">Ordrer</span>
+    <span style="text-align:right">Varer</span>
+    <span style="text-align:right">Eldste</span>
+  </div>`;
 
-  // Bygg én rad per ordre.
-  const body = orders.map(o => {
-    const age = now - new Date(o.createdAt).getTime();
-    const active = !INACTIVE_STATUSES.has(o.status);
-    // Stale = aktiv og eldre enn 48 timer. Ferdigsendte ordre er ikke "stale".
-    const stale = active && age > STALE_THRESHOLD_MS;
-    return `<div class="order-row${stale ? ' stale' : ''}">
-      <div class="order-id">${stag(o.source)}<span class="order-num">${o.orderNumber}</span></div>
-      <span class="order-customer">${o.customerName}</span>
-      <span class="order-qty font-number">${o.totalItems}</span>
-      ${pill(o.status)}
-      <span class="order-time">${fmtTime(o.createdAt)}</span>
+  const body = groups.map(g => {
+    // Stale = gruppen har en ordre eldre enn 48 timer. Gir TV-en tydelig
+    // visuell prioritering av butikker med liggende ordre.
+    const oldestTs = g.oldestCreatedAt ? new Date(g.oldestCreatedAt).getTime() : 0;
+    const stale = Number.isFinite(oldestTs) && oldestTs > 0 && (now - oldestTs) > STALE_THRESHOLD_MS;
+    // Urgent = gruppen har aktive ekspress- eller Skinsecret B2B-ordre.
+    // Persistent markering i tilfelle operatøren gikk glipp av popup-varselet.
+    const urgent = (g.urgentCount || 0) > 0;
+    const urgentLabel = g.urgentType === 'packiyo-express' ? 'ekspress'
+                       : g.urgentType === 'skinsecret-b2b' ? 'B2B'
+                       : '';
+    const urgentCls = urgent
+      ? ` urgent urgent-${g.urgentType === 'packiyo-express' ? 'express' : 'b2b'}`
+      : '';
+    const urgentBadge = urgent
+      ? `<span class="urgent-badge">${g.urgentCount} ${urgentLabel}</span>`
+      : '';
+    return `<div class="order-row group-row${stale ? ' stale' : ''}${urgentCls}">
+      <div class="order-id">${stag(g.source)}</div>
+      <span class="order-customer">${esc(g.displayName)}${urgentBadge}</span>
+      <span class="order-qty font-number">${g.count}</span>
+      <span class="group-items font-number">${g.items}</span>
+      <span class="order-time">${fmtTime(g.oldestCreatedAt)}</span>
     </div>`;
   }).join('');
 
@@ -129,6 +130,120 @@ function applySourceErrorState(source, errorMsg) {
   }
 }
 
+// ─── Popup-varsel for ekspress-/Skinsecret B2B-ordre ────────────────────
+//
+// Serveren returnerer ALLE aktive alerts hver gang. Vi deduper på klient-
+// siden med localStorage slik at:
+//   - Samme ordre fyrer aldri popup to ganger
+//   - Første gang TV-en laster siden poppes INGENTING opp (baseline)
+//   - Hvis TV-en reboote, regner vi eksisterende alerts som allerede sett
+//     (noe operatørene allerede ser i hovedlisten — ingen grunn til storm)
+//
+// Hvis flere alerts kommer samtidig vises de én om gangen i kø.
+
+const ALERT_SEEN_KEY = 'tind_seen_alerts';    // localStorage-nøkkel: { [alertId]: firstSeenMs }
+const ALERT_SEEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // Rydd bort IDs eldre enn 7 dager
+const ALERT_AUTO_DISMISS_MS = 12_000;         // Popup lukkes automatisk etter 12s
+let alertBaselined = false;                   // Settes til true etter første processAlerts
+const alertQueue = [];                        // FIFO-kø; vi viser én om gangen
+let alertActive = false;                      // Er en popup synlig akkurat nå?
+let alertDismissTimer = null;
+
+function loadSeenAlerts() {
+  try { return JSON.parse(localStorage.getItem(ALERT_SEEN_KEY) || '{}') || {}; }
+  catch { return {}; }
+}
+function saveSeenAlerts(map) {
+  try { localStorage.setItem(ALERT_SEEN_KEY, JSON.stringify(map)); } catch {}
+}
+
+// Tar listen fra /api/data, skriver nye IDs til localStorage, og køer popups
+// for hver ID som ikke har vært sett før — så fremt vi ikke er på første last.
+function processAlerts(alerts) {
+  if (!Array.isArray(alerts)) return;
+  const seen = loadSeenAlerts();
+  const now = Date.now();
+
+  for (const a of alerts) {
+    if (!a || !a.id) continue;
+    if (!(a.id in seen)) {
+      if (alertBaselined) {
+        alertQueue.push(a);
+      }
+      seen[a.id] = now;
+    }
+  }
+
+  // Rydd opp gamle IDs slik at localStorage ikke vokser uendelig.
+  for (const id of Object.keys(seen)) {
+    if (now - seen[id] > ALERT_SEEN_TTL_MS) delete seen[id];
+  }
+  saveSeenAlerts(seen);
+
+  alertBaselined = true;
+  drainAlertQueue();
+}
+
+function drainAlertQueue() {
+  if (alertActive) return;
+  const next = alertQueue.shift();
+  if (!next) return;
+  showAlertPopup(next);
+}
+
+// Tegn én popup og start auto-dismiss-timeren.
+function showAlertPopup(a) {
+  const overlay = document.getElementById('alert-overlay');
+  const card = document.getElementById('alert-card');
+  const kicker = document.getElementById('alert-kicker');
+  const title = document.getElementById('alert-title');
+  const orderEl = document.getElementById('alert-order');
+  const storeEl = document.getElementById('alert-store');
+  if (!overlay || !card) return;
+
+  // Sett type-avhengig farge + tekst.
+  card.classList.remove('type-express', 'type-b2b');
+  if (a.type === 'packiyo-express') {
+    card.classList.add('type-express');
+    kicker.textContent = 'Ny ekspress-ordre';
+    title.textContent = a.shippingMethod || 'Express';
+  } else if (a.type === 'skinsecret-b2b') {
+    card.classList.add('type-b2b');
+    kicker.textContent = 'Ny Skinsecret B2B';
+    title.textContent = 'Skinsecret B2B';
+  } else {
+    kicker.textContent = 'Ny ordre';
+    title.textContent = a.displayName || '—';
+  }
+  orderEl.textContent = a.orderNumber || '—';
+  storeEl.textContent = a.displayName || '—';
+
+  overlay.style.display = 'flex';
+  alertActive = true;
+
+  clearTimeout(alertDismissTimer);
+  alertDismissTimer = setTimeout(dismissAlertPopup, ALERT_AUTO_DISMISS_MS);
+}
+
+function dismissAlertPopup() {
+  const overlay = document.getElementById('alert-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'none';
+  alertActive = false;
+  clearTimeout(alertDismissTimer);
+  alertDismissTimer = null;
+  // Hvis flere alerts ligger i kø, vis den neste.
+  setTimeout(drainAlertQueue, 120);
+}
+
+// Klikk hvor som helst på overlayen for å lukke manuelt.
+document.addEventListener('click', (e) => {
+  const overlay = document.getElementById('alert-overlay');
+  if (overlay && e.target && (e.target === overlay || overlay.contains(e.target))) {
+    dismissAlertPopup();
+  }
+});
+
 // ─── Hoved-polling: hent /api/data og oppdater UI ───────────────────────
 
 async function load() {
@@ -136,6 +251,13 @@ async function load() {
     // cache: 'no-store' forhindrer at nettleseren serverer gamle svar.
     // Vi vil alltid gå til CDN-cachen, ikke browser-cachen.
     const resp = await fetch('/api/data', { cache: 'no-store' });
+    // 401 = sesjonen er ugyldig/utløpt. Last siden på nytt slik at
+    // middleware redirectr til /login. Vi kommer IKKE tilbake hit før
+    // brukeren har logget inn på nytt.
+    if (resp.status === 401) {
+      location.reload();
+      return;
+    }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
 
@@ -147,12 +269,17 @@ async function load() {
     // Oppdater de store tallene i hero-delen.
     document.getElementById('stat-active').textContent = stats.activeOrders ?? 0;
     document.getElementById('stat-items').textContent = stats.totalItems ?? 0;
+    document.getElementById('stat-shipped').textContent = stats.shippedToday ?? 0;
     // Oppdater stat-barens per-kilde-tall.
     document.getElementById('source-sh').textContent = bySource.shiphero ?? 0;
     document.getElementById('source-pk').textContent = bySource.packiyo ?? 0;
 
-    // Tegn live-listen på nytt.
-    renderOrders(Array.isArray(data.orders) ? data.orders : []);
+    // Tegn klient-rollupen på nytt.
+    renderGroups(Array.isArray(data.groups) ? data.groups : []);
+
+    // Popup-varsel for ekspress/B2B-ordre. Første gang ignoreres IDs (baseline),
+    // deretter fyrer nye IDs popups. Se processAlerts for detaljer.
+    processAlerts(data.alerts);
 
     // Sett feilstatus per kilde (grønn eller rød ⚠).
     const errors = data.errors || {};
