@@ -109,7 +109,7 @@ body {
 
 .hero-stat {
   display: flex; flex-direction: column; align-items: flex-start;
-  justify-content: center; text-align: left; padding: 16px 56px;
+  justify-content: center; text-align: left; padding: 16px 32px;
 }
 .hero-stat-value { font-size: clamp(96px, 9vw, 144px); font-weight: 650; color: var(--heading); line-height: 0.95; }
 .hero-stat-label { margin-top: 16px; font-size: 22px; font-weight: 450; color: var(--muted); }
