@@ -5,6 +5,9 @@
       "schedule": "*/3 * * * *"
     }
   ],
+  "rewrites": [
+    { "source": "/login", "destination": "/login.html" }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
